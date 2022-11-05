@@ -1,5 +1,5 @@
 #[allow(dead_code)]
-#[allow(clippy::all)]
+mod buffer;
 mod split;
 
 use split::Splitter;
