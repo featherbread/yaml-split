@@ -4,7 +4,7 @@ mod buffer;
 mod encode;
 mod split;
 
-use std::io::Read;
+use std::io::{self, Read};
 
 use encode::{Endianness, UTF32Converter};
 use split::Splitter;
@@ -15,13 +15,19 @@ fn main() {
     Splitter::new();
     println!("Splitter didn't crash!");
 
-    let hello_bytes = HELLO_UTF32BE;
-    let encoder = UTF32Converter::new(hello_bytes, Endianness::BE);
-    let result = encoder
-        .bytes()
-        .map(|b| b.unwrap())
-        .inspect(|b| print!("{:?} ", b))
-        .collect();
-    let result_str = String::from_utf8(result).unwrap();
-    print!("{result_str}");
+    let encoder = UTF32Converter::new(HELLO_UTF32BE, Endianness::BE);
+    print!("{}", io::read_to_string(encoder).unwrap());
+
+    let encoder = UTF32Converter::new(HELLO_UTF32BE, Endianness::BE);
+    print!(
+        "{}",
+        String::from_utf8(
+            encoder
+                .bytes()
+                .map(|b| b.unwrap())
+                .inspect(|b| print!("{:?} ", b))
+                .collect(),
+        )
+        .unwrap()
+    );
 }
