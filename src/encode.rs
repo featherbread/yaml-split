@@ -2,42 +2,29 @@ use std::io::{self, BufRead, Cursor, Read, Write};
 
 const MAX_UTF8_ENCODED_LEN: usize = 4;
 
-pub enum Endianness {
-    BE,
-    LE,
-}
-
-impl Endianness {
-    fn decode_u32(&self, buf: [u8; 4]) -> u32 {
-        match self {
-            Endianness::BE => u32::from_be_bytes(buf),
-            Endianness::LE => u32::from_le_bytes(buf),
-        }
-    }
-}
-
-pub struct UTF32Converter<R>
+pub struct UTF8Encoder<S>
 where
-    R: BufRead,
+    S: Iterator<Item = io::Result<char>>,
 {
-    source: R,
-    endianness: Endianness,
+    source: S,
     remainder: Cursor<Vec<u8>>,
 }
 
-impl<R: BufRead> UTF32Converter<R> {
-    pub fn new(source: R, endianness: Endianness) -> Self {
+impl<S> UTF8Encoder<S>
+where
+    S: Iterator<Item = io::Result<char>>,
+{
+    pub fn new(source: S) -> Self {
         Self {
             source,
-            endianness,
             remainder: Cursor::new(Vec::new()),
         }
     }
 }
 
-impl<R> Read for UTF32Converter<R>
+impl<S> Read for UTF8Encoder<S>
 where
-    R: BufRead,
+    S: Iterator<Item = io::Result<char>>,
 {
     fn read(&mut self, mut buf: &mut [u8]) -> io::Result<usize> {
         let mut written = 0;
@@ -56,8 +43,9 @@ where
 
         // Second, emit as much as we can directly into the destination buffer.
         while buf.len() >= MAX_UTF8_ENCODED_LEN {
-            let ch = match self.read_next_char()? {
-                Some(ch) => ch,
+            let ch = match self.source.next() {
+                Some(Ok(ch)) => ch,
+                Some(Err(err)) => return Err(err),
                 None => return Ok(written),
             };
             let len = ch.encode_utf8(buf).len();
@@ -69,8 +57,9 @@ where
         // remaining space, storing the remainder of any character that we
         // cannot fully emit at this time.
         while !buf.is_empty() {
-            let ch = match self.read_next_char()? {
-                Some(ch) => ch,
+            let ch = match self.source.next() {
+                Some(Ok(ch)) => ch,
+                Some(Err(err)) => return Err(err),
                 None => return Ok(written),
             };
 
@@ -90,19 +79,57 @@ where
     }
 }
 
-impl<R> UTF32Converter<R>
+pub enum Endianness {
+    BE,
+    LE,
+}
+
+impl Endianness {
+    fn decode_u32(&self, buf: [u8; 4]) -> u32 {
+        match self {
+            Endianness::BE => u32::from_be_bytes(buf),
+            Endianness::LE => u32::from_le_bytes(buf),
+        }
+    }
+}
+
+pub struct UTF32Decoder<R>
 where
     R: BufRead,
 {
-    fn read_next_char(&mut self) -> io::Result<Option<char>> {
-        if self.source.fill_buf()?.is_empty() {
-            return Ok(None);
-        }
+    source: R,
+    endianness: Endianness,
+}
+
+impl<R> UTF32Decoder<R>
+where
+    R: BufRead,
+{
+    pub fn new(source: R, endianness: Endianness) -> Self {
+        Self { source, endianness }
+    }
+}
+
+impl<R> Iterator for UTF32Decoder<R>
+where
+    R: BufRead,
+{
+    type Item = io::Result<char>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.source.fill_buf() {
+            Ok(buf) if buf.is_empty() => return None,
+            Err(err) => return Some(Err(err)),
+            _ => {}
+        };
 
         let mut next = [0u8; 4];
-        self.source.read_exact(&mut next)?;
-        Ok(Some(
-            char::from_u32(self.endianness.decode_u32(next)).unwrap_or(char::REPLACEMENT_CHARACTER),
+        if let Err(err) = self.source.read_exact(&mut next) {
+            return Some(Err(err));
+        }
+
+        Some(Ok(
+            char::from_u32(self.endianness.decode_u32(next)).unwrap_or(char::REPLACEMENT_CHARACTER)
         ))
     }
 }
