@@ -1,3 +1,5 @@
+mod split;
+
 fn main() {
-    println!("Hello, world!");
+    split::Splitter::hello_world();
 }
