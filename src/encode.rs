@@ -23,10 +23,10 @@ impl Encoding {
         let endianness = self.endianness();
         match self {
             Encoding::UTF16BE | Encoding::UTF16LE => Box::new(UTF8Encoder::new(
-                UTF16Decoder::new(source, endianness).filter(is_not_bom),
+                UTF16Decoder::new(source, endianness).skip_while(is_bom_char),
             )),
             Encoding::UTF32BE | Encoding::UTF32LE => Box::new(UTF8Encoder::new(
-                UTF32Decoder::new(source, endianness).filter(is_not_bom),
+                UTF32Decoder::new(source, endianness).skip_while(is_bom_char),
             )),
         }
     }
@@ -39,10 +39,10 @@ impl Encoding {
     }
 }
 
-fn is_not_bom(result: &Result<char, io::Error>) -> bool {
+fn is_bom_char(result: &Result<char, io::Error>) -> bool {
     match result {
-        Err(_) => true,
-        Ok(ch) => *ch != '\u{FEFF}',
+        Ok(ch) => *ch == '\u{FEFF}',
+        Err(_) => false,
     }
 }
 

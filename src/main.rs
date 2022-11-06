@@ -18,7 +18,7 @@ fn main() {
         Some(filename) => Box::new(BufReader::new(File::open(filename).unwrap())),
     };
 
-    println!("{:?}", cli.from_code);
+    println!("encoding: {:?}", cli.from_code);
     let reader: Box<dyn BufRead> = match cli.from_code {
         None => input,
         Some(code) => Box::new(BufReader::new(code.utf8_reader(input))),
