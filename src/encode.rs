@@ -2,6 +2,8 @@ use std::io::{self, BufRead, Read};
 
 const MAX_UTF8_ENCODED_LEN: usize = 4;
 
+/// A streaming UTF-8 encoder designed to pair with [`UTF16Decoder`] or
+/// [`UTF32Decoder`].
 pub struct UTF8Encoder<S>
 where
     S: Iterator<Item = io::Result<char>>,
@@ -71,7 +73,7 @@ where
             written += emit_len;
 
             if buf.is_empty() {
-                self.remainder.set(&tmp[emit_len..char_len]);
+                self.remainder.reset(&tmp[emit_len..char_len]);
             }
         }
 
@@ -79,6 +81,7 @@ where
     }
 }
 
+/// A reusable statically-sized byte buffer with non-seekable read support.
 struct Buffer<const SIZE: usize> {
     buf: [u8; SIZE],
     pos: usize,
@@ -86,6 +89,7 @@ struct Buffer<const SIZE: usize> {
 }
 
 impl<const SIZE: usize> Buffer<SIZE> {
+    /// Returns a new empty buffer.
     fn new() -> Self {
         Self {
             buf: [0u8; SIZE],
@@ -94,11 +98,19 @@ impl<const SIZE: usize> Buffer<SIZE> {
         }
     }
 
+    /// Returns whether the buffer is empty; that is, whether it contains no
+    /// unread content.
     fn is_empty(&self) -> bool {
         self.pos == self.len
     }
 
-    fn set(&mut self, buf: &[u8]) {
+    /// Replaces any existing contents of the buffer with the provided bytes.
+    /// Future reads will produce these bytes until EOF.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `buf` is longer than the static size of the buffer.
+    fn reset(&mut self, buf: &[u8]) {
         debug_assert!(
             buf.len() <= SIZE,
             "called Buffer::set with a slice of size {} on a Buffer of size {}",
@@ -120,6 +132,7 @@ impl<const SIZE: usize> Read for Buffer<SIZE> {
     }
 }
 
+/// Represents the endianness of UTF-16 or UTF-32 text.
 pub enum Endianness {
     Big,
     Little,
@@ -141,6 +154,7 @@ impl Endianness {
     }
 }
 
+/// A streaming lossy UTF-16 decoder.
 pub struct UTF16Decoder<R>
 where
     R: BufRead,
@@ -160,6 +174,18 @@ where
             endianness,
             buf: None,
         }
+    }
+
+    fn next_u16(&mut self) -> io::Result<Option<u16>> {
+        match self.source.fill_buf() {
+            Ok(buf) if buf.is_empty() => return Ok(None),
+            Err(err) => return Err(err),
+            _ => {}
+        };
+
+        let mut buf = [0u8; 2];
+        self.source.read_exact(&mut buf)?;
+        Ok(Some(self.endianness.decode_u16(buf)))
     }
 }
 
@@ -210,23 +236,7 @@ where
     }
 }
 
-impl<R> UTF16Decoder<R>
-where
-    R: BufRead,
-{
-    fn next_u16(&mut self) -> io::Result<Option<u16>> {
-        match self.source.fill_buf() {
-            Ok(buf) if buf.is_empty() => return Ok(None),
-            Err(err) => return Err(err),
-            _ => {}
-        };
-
-        let mut buf = [0u8; 2];
-        self.source.read_exact(&mut buf)?;
-        Ok(Some(self.endianness.decode_u16(buf)))
-    }
-}
-
+/// A streaming lossy UTF-32 decoder.
 pub struct UTF32Decoder<R>
 where
     R: BufRead,
