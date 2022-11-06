@@ -19,26 +19,29 @@ where
 {
     pub fn new(reader: R) -> Self {
         let reader = Box::pin(reader);
+        let parser = {
+            let mut parser_uninit = Box::pin(MaybeUninit::<yaml_parser_t>::zeroed());
 
-        let mut parser_uninit = Box::pin(MaybeUninit::<yaml_parser_t>::zeroed());
-        // SAFETY: libyaml is assumed to be correct.
-        if unsafe { yaml_parser_initialize(parser_uninit.as_mut_ptr()).fail } {
-            panic!("failed to initialize YAML parser");
-        }
-        // SAFETY: MaybeUninit<T> is guaranteed by the standard library to have
-        // the same size, alignment, and ABI as T. This usage is roughly similar
-        // to the "Initializing an array element-by-element" example in the
-        // MaybeUninit docs.
-        let parser = unsafe {
-            std::mem::transmute::<Pin<Box<MaybeUninit<yaml_parser_t>>>, Pin<Box<yaml_parser_t>>>(
-                parser_uninit,
-            )
+            // SAFETY: We assume that libyaml works correctly. From what I
+            // understand, the only possible failure mode here is a memory
+            // allocation error, which we can't reasonably handle with any
+            // grace. serde_yaml panics here too, for whatever it's worth.
+            if unsafe { yaml_parser_initialize(parser_uninit.as_mut_ptr()).fail } {
+                panic!("failed to initialize YAML parser");
+            }
+
+            // SAFETY: MaybeUninit<T> is guaranteed by the standard library to
+            // have the same size, alignment, and ABI as T. This is roughly
+            // similar to the "Initializing an array element-by-element" example
+            // in the MaybeUninit docs.
+            unsafe { std::mem::transmute::<Pin<Box<MaybeUninit<_>>>, Pin<Box<_>>>(parser_uninit) }
         };
 
         let mut splitter = Self { parser, reader };
 
-        // I haven't even attempted to run this and I'm already having
-        // nightmares about it.
+        // SAFETY: Well… the program doesn't seem to crash, nor does Miri seem
+        // to blow up on it. This is really ugly, though. I desperately need to
+        // get a handle on serde_yaml's whole `Owned` thing.
         unsafe {
             yaml_parser_set_input(
                 splitter.parser.as_mut().get_unchecked_mut(),
@@ -54,20 +57,22 @@ where
         splitter
     }
 
-    unsafe fn read_callback(
-        r: *mut c_void,
-        buffer: *mut u8,
-        size: u64,
-        size_read: *mut u64,
-    ) -> i32 {
-        // This can't possibly work, right?
-        let r = &mut *(r as *mut R);
-        let buf = std::slice::from_raw_parts_mut(buffer, size as usize);
+    fn read_callback(r: *mut c_void, buffer: *mut u8, size: u64, size_read: *mut u64) -> i32 {
+        // SAFETY: Once we take ownership of the reader during construction,
+        // this is the only function that ever constructs a &mut to it before it
+        // is dropped.
+        let r = unsafe { &mut *(r as *mut R) };
+
+        // SAFETY: We assume that libyaml gives us a valid buffer.
+        let buf = unsafe { std::slice::from_raw_parts_mut(buffer, size as usize) };
+
         let len = match r.read(buf) {
             Ok(len) => len,
             Err(_) => return 0,
         };
-        *size_read = len as u64;
+
+        // SAFETY: We assume that libyaml gives us a valid place to write this.
+        unsafe { *size_read = len as u64 };
         1
     }
 }
