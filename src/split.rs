@@ -39,7 +39,7 @@ where
 
     fn read_callback(reader: *mut c_void, buffer: *mut u8, size: u64, size_read: *mut u64) -> i32 {
         // See `yaml_parser_set_input`.
-        const FAIL: i32 = 0;
+        const FAILURE: i32 = 0;
         const SUCCESS: i32 = 1;
 
         // SAFETY: We assume that libyaml gives us a valid buffer.
@@ -51,7 +51,7 @@ where
         // raw pointers, does it?).
         let len = match unsafe { (*reader.cast::<R>()).read(buf) } {
             Ok(len) => len,
-            Err(_) => return FAIL,
+            Err(_) => return FAILURE,
         };
 
         // SAFETY: We assume that libyaml gives us a valid place to write this.
