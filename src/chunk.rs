@@ -25,7 +25,7 @@ impl<R> Chunker<R>
 where
     R: Read,
 {
-    fn new(reader: R) -> Self {
+    pub fn new(reader: R) -> Self {
         let parser = {
             let mut parser = Box::new(MaybeUninit::<yaml_parser_t>::uninit());
             if unsafe { yaml_parser_initialize(parser.as_mut_ptr()) }.fail {

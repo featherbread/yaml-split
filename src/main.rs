@@ -8,6 +8,7 @@ mod chunk;
 mod encode;
 mod split;
 
+use chunk::Chunker;
 use encode::{Encoding, Endianness};
 use split::Splitter;
 
@@ -25,8 +26,15 @@ fn main() {
         Some(code) => Box::new(BufReader::new(code.utf8_reader(input))),
     };
 
-    for (event_type, index) in Splitter::new(reader) {
-        println!("type = {} @ index = {}", event_type, index);
+    for chunk in Chunker::new(reader) {
+        match chunk {
+            Err(err) => panic!("chunker error: {}", err),
+            Ok(chunk) => println!(
+                ">>> START CHUNK ({} bytes) >>>|{}|<<< END CHUNK <<<",
+                chunk.len(),
+                std::str::from_utf8(&chunk).unwrap()
+            ),
+        }
     }
 }
 
