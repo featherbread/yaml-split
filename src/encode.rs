@@ -4,6 +4,46 @@ use std::io::{self, BufRead, Read};
 
 const MAX_UTF8_ENCODED_LEN: usize = 4;
 
+/// Represents possible source encodings for the encoder.
+#[allow(dead_code)]
+pub enum Encoding {
+    UTF16BE,
+    UTF16LE,
+    UTF32BE,
+    UTF32LE,
+}
+
+impl Encoding {
+    fn endianness(&self) -> Endianness {
+        match self {
+            Encoding::UTF16BE | Encoding::UTF32BE => Endianness::Big,
+            Encoding::UTF16LE | Encoding::UTF32LE => Endianness::Little,
+        }
+    }
+}
+
+/// Represents the endianness of UTF-16 or UTF-32 text.
+pub enum Endianness {
+    Big,
+    Little,
+}
+
+impl Endianness {
+    fn decode_u16(&self, buf: [u8; 2]) -> u16 {
+        match self {
+            Endianness::Big => u16::from_be_bytes(buf),
+            Endianness::Little => u16::from_le_bytes(buf),
+        }
+    }
+
+    fn decode_u32(&self, buf: [u8; 4]) -> u32 {
+        match self {
+            Endianness::Big => u32::from_be_bytes(buf),
+            Endianness::Little => u32::from_le_bytes(buf),
+        }
+    }
+}
+
 /// A streaming UTF-8 encoder designed to pair with [`UTF16Decoder`] or
 /// [`UTF32Decoder`].
 pub struct UTF8Encoder<S>
@@ -23,6 +63,22 @@ where
             source,
             remainder: Buffer::new(),
         }
+    }
+}
+
+impl<'r> UTF8Encoder<Box<dyn Iterator<Item = io::Result<char>> + 'r>> {
+    pub fn from_reader<R>(r: R, encoding: Encoding) -> Self
+    where
+        R: BufRead + 'r,
+    {
+        Self::new(match encoding {
+            enc @ (Encoding::UTF16BE | Encoding::UTF16LE) => {
+                Box::new(UTF16Decoder::new(r, enc.endianness()))
+            }
+            enc @ (Encoding::UTF32BE | Encoding::UTF32LE) => {
+                Box::new(UTF32Decoder::new(r, enc.endianness()))
+            }
+        })
     }
 }
 
@@ -131,28 +187,6 @@ impl<const SIZE: usize> Read for Buffer<SIZE> {
         buf[..len].copy_from_slice(&self.buf[self.pos..self.pos + len]);
         self.pos += len;
         Ok(len)
-    }
-}
-
-/// Represents the endianness of UTF-16 or UTF-32 text.
-pub enum Endianness {
-    Big,
-    Little,
-}
-
-impl Endianness {
-    fn decode_u16(&self, buf: [u8; 2]) -> u16 {
-        match self {
-            Endianness::Big => u16::from_be_bytes(buf),
-            Endianness::Little => u16::from_le_bytes(buf),
-        }
-    }
-
-    fn decode_u32(&self, buf: [u8; 4]) -> u32 {
-        match self {
-            Endianness::Big => u32::from_be_bytes(buf),
-            Endianness::Little => u32::from_le_bytes(buf),
-        }
     }
 }
 

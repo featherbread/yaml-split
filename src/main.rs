@@ -3,10 +3,8 @@ mod split;
 
 use std::io::{self, Read};
 
-use encode::{Endianness, UTF32Decoder, UTF8Encoder};
+use encode::{Encoding, UTF8Encoder};
 use split::Splitter;
-
-use crate::encode::UTF16Decoder;
 
 static HELLO_UTF32BE: &[u8] = include_bytes!("hello-utf32be.txt");
 static HELLO_UTF16LE: &[u8] = include_bytes!("hello-utf16le.txt");
@@ -15,23 +13,11 @@ fn main() {
     Splitter::new();
     println!("Splitter didn't crash!");
 
-    print_string(UTF8Encoder::new(UTF16Decoder::new(
-        HELLO_UTF16LE,
-        Endianness::Little,
-    )));
-    print_string(UTF8Encoder::new(UTF32Decoder::new(
-        HELLO_UTF32BE,
-        Endianness::Big,
-    )));
+    print_string(UTF8Encoder::from_reader(HELLO_UTF16LE, Encoding::UTF16LE));
+    print_string(UTF8Encoder::from_reader(HELLO_UTF32BE, Encoding::UTF32BE));
 
-    print_bytes_and_string(UTF8Encoder::new(UTF16Decoder::new(
-        HELLO_UTF16LE,
-        Endianness::Little,
-    )));
-    print_bytes_and_string(UTF8Encoder::new(UTF32Decoder::new(
-        HELLO_UTF32BE,
-        Endianness::Big,
-    )));
+    print_bytes_and_string(UTF8Encoder::from_reader(HELLO_UTF16LE, Encoding::UTF16LE));
+    print_bytes_and_string(UTF8Encoder::from_reader(HELLO_UTF32BE, Encoding::UTF32BE));
 }
 
 fn print_string(r: impl Read) {
