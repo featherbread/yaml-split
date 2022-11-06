@@ -104,8 +104,8 @@ where
     fn drop(&mut self) {
         unsafe {
             yaml_parser_delete(self.parser);
-            let _ = Box::from_raw(self.parser);
-            let _ = Box::from_raw(self.reader);
+            drop(Box::from_raw(self.parser));
+            drop(Box::from_raw(self.reader));
         }
     }
 }
