@@ -4,6 +4,7 @@ use std::path::PathBuf;
 
 use clap::Parser;
 
+mod chunk;
 mod encode;
 mod split;
 
