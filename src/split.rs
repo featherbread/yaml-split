@@ -17,15 +17,18 @@ where
     R: Read,
 {
     pub fn new(reader: R) -> Self {
+        // SAFETY: We assume that libyaml is correct. To prevent leaks, we do
+        // not panic after turning the Box into a raw pointer.
         let parser = unsafe {
-            let mut parser_uninit = Box::new(MaybeUninit::<yaml_parser_t>::uninit());
-            if yaml_parser_initialize(parser_uninit.as_mut_ptr()).fail {
+            let mut parser = Box::new(MaybeUninit::<yaml_parser_t>::uninit());
+            if yaml_parser_initialize(parser.as_mut_ptr()).fail {
                 panic!("failed to initialize YAML parser");
             }
-            Box::into_raw(parser_uninit) as *mut yaml_parser_t
+            Box::into_raw(parser) as *mut yaml_parser_t
         };
 
         let reader = Box::into_raw(Box::new(reader));
+        // SAFETY: We assume that libyaml is correct.
         unsafe {
             yaml_parser_set_input(parser, Self::read_callback, reader as *mut c_void);
             yaml_parser_set_encoding(parser, YAML_UTF8_ENCODING);
@@ -35,22 +38,24 @@ where
     }
 
     fn read_callback(reader: *mut c_void, buffer: *mut u8, size: u64, size_read: *mut u64) -> i32 {
-        // SAFETY: Once we take ownership of the reader during construction,
-        // this is the only function that ever constructs a &mut to it before it
-        // is dropped.
-        let reader = reader as *mut R;
+        // See `yaml_parser_set_input`.
+        const FAIL: i32 = 0;
+        const SUCCESS: i32 = 1;
 
         // SAFETY: We assume that libyaml gives us a valid buffer.
         let buf = unsafe { std::slice::from_raw_parts_mut(buffer, size as usize) };
 
-        let len = match unsafe { (*reader).read(buf) } {
+        // SAFETY: After Splitter takes ownership of the provided reader, this
+        // is the only place where it is ever used prior to being dropped, so we
+        // do not expect any aliasing.
+        let len = match unsafe { (*reader.cast::<R>()).read(buf) } {
             Ok(len) => len,
-            Err(_) => return 0,
+            Err(_) => return FAIL,
         };
 
         // SAFETY: We assume that libyaml gives us a valid place to write this.
         unsafe { *size_read = len as u64 };
-        1
+        SUCCESS
     }
 }
 
