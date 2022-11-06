@@ -6,11 +6,9 @@ use clap::Parser;
 
 mod chunk;
 mod encode;
-mod split;
 
 use chunk::Chunker;
 use encode::{Encoding, Endianness};
-use split::Splitter;
 
 fn main() {
     let cli = Cli::parse();
