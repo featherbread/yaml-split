@@ -26,10 +26,12 @@ where
     R: Read,
 {
     pub fn new(reader: R) -> Self {
-        let parser = {
+        // SAFETY: libyaml code is assumed to be correct. To avoid leaking
+        // memory, we don't unbox the pointer until after the panic attempt.
+        let parser = unsafe {
             let mut parser = Box::new(MaybeUninit::<yaml_parser_t>::uninit());
-            if unsafe { yaml_parser_initialize(parser.as_mut_ptr()) }.fail {
-                panic!("failed to initialize libyaml parser");
+            if yaml_parser_initialize(parser.as_mut_ptr()).fail {
+                panic!("out of memory for libyaml parser initialization");
             }
             Box::into_raw(parser).cast::<yaml_parser_t>()
         };
@@ -38,6 +40,7 @@ where
             reader: ChunkReader::new(reader),
             error: None,
         }));
+        // SAFETY: libyaml code is assumed to be correct.
         unsafe {
             yaml_parser_set_encoding(parser, YAML_UTF8_ENCODING);
             yaml_parser_set_input(parser, Self::read_callback, read_state as *mut c_void);
@@ -47,7 +50,7 @@ where
     }
 
     unsafe fn read_callback(
-        reader: *mut c_void,
+        read_state: *mut c_void,
         buffer: *mut u8,
         size: u64,
         size_read: *mut u64,
@@ -55,7 +58,11 @@ where
         const READ_FAILURE: i32 = 0;
         const READ_SUCCESS: i32 = 1;
 
-        let read_state = reader.cast::<ReadState<R>>();
+        // SAFETY: libyaml code is assumed to be correct, in that it passes us
+        // the data pointer we originally provided along with a valid buffer.
+        // Because we obtained the ReadState<R> pointer from a Box, we expect
+        // that it is safe to dereference.
+        let read_state = read_state.cast::<ReadState<R>>();
         let buf = std::slice::from_raw_parts_mut(buffer, size as usize);
 
         match (*read_state).reader.read(buf) {
@@ -80,26 +87,34 @@ where
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
-            let event = match unsafe { Event::from_parser(self.parser) } {
-                Ok(event) => event,
-                Err(()) => unsafe {
-                    if (*self.parser).error == YAML_READER_ERROR {
-                        if let Some(err) = (*self.read_state).error.take() {
-                            return Some(Err(err));
+            // SAFETY: We properly initialized self.parser and self.read_state
+            // when the Chunker was constructed.
+            let event = unsafe {
+                match Event::from_parser(self.parser) {
+                    Ok(event) => event,
+                    Err(()) => {
+                        if (*self.parser).error == YAML_READER_ERROR {
+                            if let Some(err) = (*self.read_state).error.take() {
+                                return Some(Err(err));
+                            }
                         }
+                        return Some(Err(io::ErrorKind::Other.into()));
                     }
-                    return Some(Err(io::ErrorKind::Other.into()));
-                },
+                }
             };
 
             match event.type_ {
                 YAML_STREAM_END_EVENT => return None,
                 YAML_DOCUMENT_START_EVENT => {
                     let pos = event.start_mark.index;
+                    // SAFETY: We properly initialized self.read_state when the
+                    // Chunker was constructed.
                     unsafe { (*self.read_state).reader.trim_to_start(pos) };
                 }
                 YAML_DOCUMENT_END_EVENT => {
                     let pos = event.end_mark.index;
+                    // SAFETY: We properly initialized self.read_state when the
+                    // Chunker was constructed.
                     let chunk = unsafe { (*self.read_state).reader.take_to_end(pos) };
                     return Some(Ok(chunk));
                 }
@@ -114,6 +129,8 @@ where
     R: Read,
 {
     fn drop(&mut self) {
+        // SAFETY: libyaml code is assumed to be correct. Both of the raw
+        // pointers were originally obtained from Boxes.
         unsafe {
             yaml_parser_delete(self.parser);
             drop(Box::from_raw(self.parser));
@@ -138,6 +155,8 @@ impl Deref for Event {
     type Target = yaml_event_t;
 
     fn deref(&self) -> &Self::Target {
+        // SAFETY: We never expose the raw pointer externally, so there should
+        // be no opportunity to violate aliasing rules.
         unsafe { &*self.0 }
     }
 }
