@@ -1,4 +1,4 @@
-use std::io::{self, BufRead, Cursor, Read, Write};
+use std::io::{self, BufRead, Read};
 
 const MAX_UTF8_ENCODED_LEN: usize = 4;
 
@@ -7,8 +7,7 @@ where
     S: Iterator<Item = io::Result<char>>,
 {
     source: S,
-    remainder: Cursor<[u8; MAX_UTF8_ENCODED_LEN]>,
-    remainder_len: usize,
+    remainder: Buffer<MAX_UTF8_ENCODED_LEN>,
 }
 
 impl<S> UTF8Encoder<S>
@@ -18,8 +17,7 @@ where
     pub fn new(source: S) -> Self {
         Self {
             source,
-            remainder: Cursor::new([0u8; MAX_UTF8_ENCODED_LEN]),
-            remainder_len: 0,
+            remainder: Buffer::new(),
         }
     }
 }
@@ -33,13 +31,11 @@ where
 
         // First, emit the remainder of any character that a previous read could
         // not fully emit.
-        if self.remainder_len > 0 {
-            let len = std::cmp::min(buf.len(), self.remainder_len);
-            self.remainder.read_exact(&mut buf[..len])?;
+        if !self.remainder.is_empty() {
+            let len = self.remainder.read(buf)?;
             buf = &mut buf[len..];
             written += len;
-            self.remainder_len -= len;
-            if self.remainder_len > 0 {
+            if !self.remainder.is_empty() {
                 return Ok(written);
             }
         }
@@ -75,14 +71,52 @@ where
             written += emit_len;
 
             if buf.is_empty() {
-                self.remainder.set_position(0);
-                self.remainder.write_all(&tmp[emit_len..char_len])?;
-                self.remainder.set_position(0);
-                self.remainder_len = char_len - emit_len;
+                self.remainder.set(&tmp[emit_len..char_len]);
             }
         }
 
         Ok(written)
+    }
+}
+
+struct Buffer<const SIZE: usize> {
+    buf: [u8; SIZE],
+    pos: usize,
+    len: usize,
+}
+
+impl<const SIZE: usize> Buffer<SIZE> {
+    fn new() -> Self {
+        Self {
+            buf: [0u8; SIZE],
+            pos: 0,
+            len: 0,
+        }
+    }
+
+    fn is_empty(&self) -> bool {
+        self.pos == self.len
+    }
+
+    fn set(&mut self, buf: &[u8]) {
+        debug_assert!(
+            buf.len() <= SIZE,
+            "called Buffer::set with a slice of size {} on a Buffer of size {}",
+            buf.len(),
+            SIZE,
+        );
+        self.buf[..buf.len()].copy_from_slice(buf);
+        self.pos = 0;
+        self.len = buf.len();
+    }
+}
+
+impl<const SIZE: usize> Read for Buffer<SIZE> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        let len = std::cmp::min(self.len - self.pos, buf.len());
+        buf[..len].copy_from_slice(&self.buf[self.pos..self.pos + len]);
+        self.pos += len;
+        Ok(len)
     }
 }
 
