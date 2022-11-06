@@ -1,4 +1,6 @@
-use std::ffi::c_void;
+use std::error::Error;
+use std::ffi::{c_void, CStr};
+use std::fmt::Display;
 use std::io::{self, Read};
 use std::mem::{self, MaybeUninit};
 use std::ops::Deref;
@@ -59,10 +61,15 @@ where
         const READ_SUCCESS: i32 = 1;
 
         // SAFETY: libyaml code is assumed to be correct, in that it passes us
-        // the data pointer we originally provided along with a valid buffer.
-        // Because we obtained the ReadState<R> pointer from a Box, we expect
-        // that it is safe to dereference.
+        // the data pointer we originally provided.
         let read_state = read_state.cast::<ReadState<R>>();
+
+        // TODO: libyaml code is assumed to pass us a valid buffer of the
+        // provided size. However, it does seem to malloc() this buffer with no
+        // further initialization of its own. We arguably aren't violating any
+        // type-level invariants here, since a u8 can represent any byte, but at
+        // best this is playing very fast and loose with the definition of
+        // "properly initialized."
         let buf = std::slice::from_raw_parts_mut(buffer, size as usize);
 
         match (*read_state).reader.read(buf) {
@@ -93,12 +100,14 @@ where
                 match Event::from_parser(self.parser) {
                     Ok(event) => event,
                     Err(()) => {
-                        if (*self.parser).error == YAML_READER_ERROR {
-                            if let Some(err) = (*self.read_state).error.take() {
-                                return Some(Err(err));
-                            }
+                        return if let Some(err) = (*self.read_state).error.take() {
+                            Some(Err(err))
+                        } else {
+                            Some(Err(io::Error::new(
+                                io::ErrorKind::InvalidData,
+                                ParserError::from_parser(self.parser),
+                            )))
                         }
-                        return Some(Err(io::ErrorKind::Other.into()));
                     }
                 }
             };
@@ -167,6 +176,35 @@ impl Drop for Event {
             yaml_event_delete(self.0);
             drop(Box::from_raw(self.0));
         }
+    }
+}
+
+#[derive(Debug)]
+struct ParserError {
+    offset: u64,
+    description: String,
+}
+
+impl ParserError {
+    unsafe fn from_parser(parser: *mut yaml_parser_t) -> Self {
+        Self {
+            offset: (*parser).problem_offset,
+            description: CStr::from_ptr((*parser).problem)
+                .to_string_lossy()
+                .into_owned(),
+        }
+    }
+}
+
+impl Error for ParserError {}
+
+impl Display for ParserError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "YAML error at byte {}: {}",
+            self.offset, self.description
+        )
     }
 }
 
