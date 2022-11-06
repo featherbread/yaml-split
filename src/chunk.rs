@@ -4,6 +4,7 @@ use std::fmt::Display;
 use std::io::{self, Read};
 use std::mem::{self, MaybeUninit};
 use std::ops::Deref;
+use std::ptr::NonNull;
 
 use unsafe_libyaml::*;
 
@@ -181,17 +182,19 @@ impl Drop for Event {
 
 #[derive(Debug)]
 struct ParserError {
-    offset: u64,
-    description: String,
+    problem: Option<LocatedError>,
+    context: Option<LocatedError>,
 }
 
 impl ParserError {
     unsafe fn from_parser(parser: *mut yaml_parser_t) -> Self {
         Self {
-            offset: (*parser).problem_offset,
-            description: CStr::from_ptr((*parser).problem)
-                .to_string_lossy()
-                .into_owned(),
+            problem: NonNull::new((*parser).problem as *mut i8).map(|problem| {
+                LocatedError::from_parts(problem.as_ptr().cast(), (*parser).problem_mark)
+            }),
+            context: NonNull::new((*parser).context as *mut i8).map(|context| {
+                LocatedError::from_parts(context.as_ptr().cast(), (*parser).context_mark)
+            }),
         }
     }
 }
@@ -200,10 +203,41 @@ impl Error for ParserError {}
 
 impl Display for ParserError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self.problem {
+            None => f.write_str("unknown libyaml error"),
+            Some(problem) => match &self.context {
+                None => Display::fmt(problem, f),
+                Some(context) => write!(f, "{}, {}", problem, context),
+            },
+        }
+    }
+}
+
+#[derive(Debug)]
+struct LocatedError {
+    description: String,
+    line: u64,
+    column: u64,
+}
+
+impl LocatedError {
+    unsafe fn from_parts(description: *const i8, mark: yaml_mark_t) -> Self {
+        Self {
+            description: CStr::from_ptr(description).to_string_lossy().into_owned(),
+            line: mark.line,
+            column: mark.column,
+        }
+    }
+}
+
+impl Display for LocatedError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "YAML error at byte {}: {}",
-            self.offset, self.description
+            "{} at line {} column {}",
+            self.description,
+            self.line + 1,
+            self.column + 1,
         )
     }
 }
