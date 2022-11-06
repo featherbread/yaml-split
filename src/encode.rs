@@ -1,40 +1,61 @@
+use std::cmp::min;
 use std::error::Error;
 use std::fmt::{Debug, Display, LowerHex};
 use std::io::{self, BufRead, Read};
 
 const MAX_UTF8_ENCODED_LEN: usize = 4;
 
-/// Represents possible source encodings.
-#[derive(Debug)]
-pub enum Encoding {
-    UTF16BE,
-    UTF16LE,
-    UTF32BE,
-    UTF32LE,
+pub struct Transcoder<R>(TranscoderKind<R>)
+where
+    R: BufRead;
+
+enum TranscoderKind<R>
+where
+    R: BufRead,
+{
+    Passthrough(R),
+    FromUTF16(UTF8Encoder<UTF16Decoder<R>>),
+    FromUTF32(UTF8Encoder<UTF32Decoder<R>>),
 }
 
-impl Encoding {
-    /// Returns a reader that translates from the source encoding to UTF-8 as it
-    /// reads.
-    pub fn utf8_reader<'r, R>(&self, source: R) -> Box<dyn Read + 'r>
-    where
-        R: BufRead + 'r,
-    {
-        let endianness = self.endianness();
-        match self {
-            Encoding::UTF16BE | Encoding::UTF16LE => {
-                Box::new(UTF8Encoder::new(UTF16Decoder::new(source, endianness)))
-            }
-            Encoding::UTF32BE | Encoding::UTF32LE => {
-                Box::new(UTF8Encoder::new(UTF32Decoder::new(source, endianness)))
-            }
-        }
-    }
+impl<R> Transcoder<R>
+where
+    R: BufRead,
+{
+    pub fn new(mut reader: R) -> Self {
+        let mut prefix = [0u8; 4];
+        let buf = reader.fill_buf().unwrap_or(&[]);
+        let len = min(buf.len(), prefix.len());
+        prefix[..len].copy_from_slice(&buf[..len]);
 
-    fn endianness(&self) -> Endianness {
-        match self {
-            Encoding::UTF16BE | Encoding::UTF32BE => Endianness::Big,
-            Encoding::UTF16LE | Encoding::UTF32LE => Endianness::Little,
+        // See https://yaml.org/spec/1.2.2/#52-character-encodings.
+        Self(match prefix {
+            [0, 0, 0xFE, 0xFF] | [0, 0, 0, _] if len == 4 => TranscoderKind::FromUTF32(
+                UTF8Encoder::new(UTF32Decoder::new(reader, Endianness::Big)),
+            ),
+            [0xFF, 0xFE, 0, 0] | [_, 0, 0, 0] if len == 4 => TranscoderKind::FromUTF32(
+                UTF8Encoder::new(UTF32Decoder::new(reader, Endianness::Little)),
+            ),
+            [0xFE, 0xFF, ..] | [0, _, ..] if len >= 2 => TranscoderKind::FromUTF16(
+                UTF8Encoder::new(UTF16Decoder::new(reader, Endianness::Big)),
+            ),
+            [0xFF, 0xFE, ..] | [_, 0, ..] if len >= 2 => TranscoderKind::FromUTF16(
+                UTF8Encoder::new(UTF16Decoder::new(reader, Endianness::Little)),
+            ),
+            _ => TranscoderKind::Passthrough(reader),
+        })
+    }
+}
+
+impl<R> Read for Transcoder<R>
+where
+    R: BufRead,
+{
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        match &mut self.0 {
+            TranscoderKind::Passthrough(r) => r.read(buf),
+            TranscoderKind::FromUTF16(r) => r.read(buf),
+            TranscoderKind::FromUTF32(r) => r.read(buf),
         }
     }
 }
@@ -143,7 +164,7 @@ where
             let mut tmp = [0u8; MAX_UTF8_ENCODED_LEN];
             let char_len = ch.encode_utf8(&mut tmp).len();
 
-            let emit_len = std::cmp::min(char_len, buf.len());
+            let emit_len = min(char_len, buf.len());
             buf[..emit_len].copy_from_slice(&tmp[..emit_len]);
             buf = &mut buf[emit_len..];
             written += emit_len;
@@ -201,7 +222,7 @@ impl<const SIZE: usize> Buffer<SIZE> {
 
 impl<const SIZE: usize> Read for Buffer<SIZE> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        let len = std::cmp::min(self.len - self.pos, buf.len());
+        let len = min(self.len - self.pos, buf.len());
         buf[..len].copy_from_slice(&self.buf[self.pos..self.pos + len]);
         self.pos += len;
         Ok(len)
