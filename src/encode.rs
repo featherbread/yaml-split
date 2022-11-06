@@ -22,12 +22,12 @@ impl Encoding {
     {
         let endianness = self.endianness();
         match self {
-            Encoding::UTF16BE | Encoding::UTF16LE => Box::new(UTF8Encoder::new(
-                UTF16Decoder::new(source, endianness).skip_while(is_bom_char),
-            )),
-            Encoding::UTF32BE | Encoding::UTF32LE => Box::new(UTF8Encoder::new(
-                UTF32Decoder::new(source, endianness).skip_while(is_bom_char),
-            )),
+            Encoding::UTF16BE | Encoding::UTF16LE => {
+                Box::new(UTF8Encoder::new(UTF16Decoder::new(source, endianness)))
+            }
+            Encoding::UTF32BE | Encoding::UTF32LE => {
+                Box::new(UTF8Encoder::new(UTF32Decoder::new(source, endianness)))
+            }
         }
     }
 
@@ -36,13 +36,6 @@ impl Encoding {
             Encoding::UTF16BE | Encoding::UTF32BE => Endianness::Big,
             Encoding::UTF16LE | Encoding::UTF32LE => Endianness::Little,
         }
-    }
-}
-
-fn is_bom_char(result: &Result<char, io::Error>) -> bool {
-    match result {
-        Ok(ch) => *ch == '\u{FEFF}',
-        Err(_) => false,
     }
 }
 
@@ -70,12 +63,16 @@ impl Endianness {
 
 /// A streaming UTF-8 encoder designed to pair with [`UTF16Decoder`] or
 /// [`UTF32Decoder`].
+///
+/// If the source document starts with a BOM, the encoder will skip it and
+/// reading will begin with the actual text content.
 pub struct UTF8Encoder<S>
 where
     S: Iterator<Item = io::Result<char>>,
 {
     source: S,
     remainder: Buffer<MAX_UTF8_ENCODED_LEN>,
+    started: bool,
 }
 
 impl<S> UTF8Encoder<S>
@@ -86,6 +83,19 @@ where
         Self {
             source,
             remainder: Buffer::new(),
+            started: false,
+        }
+    }
+
+    fn next_without_bom(&mut self) -> Option<io::Result<char>> {
+        if self.started {
+            return self.source.next();
+        }
+
+        self.started = true;
+        match self.source.next() {
+            Some(Ok(ch)) if ch == '\u{FEFF}' => self.source.next(),
+            result => result,
         }
     }
 }
@@ -110,7 +120,7 @@ where
 
         // Second, emit as much as we can directly into the destination buffer.
         while buf.len() >= MAX_UTF8_ENCODED_LEN {
-            let ch = match self.source.next() {
+            let ch = match self.next_without_bom() {
                 Some(Ok(ch)) => ch,
                 Some(Err(err)) => return Err(err),
                 None => return Ok(written),
