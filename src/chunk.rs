@@ -190,10 +190,14 @@ impl ParserError {
     unsafe fn from_parser(parser: *mut yaml_parser_t) -> Self {
         Self {
             problem: NonNull::new((*parser).problem as *mut i8).map(|problem| {
-                LocatedError::from_parts(problem.as_ptr().cast(), (*parser).problem_mark)
+                LocatedError::from_parts(
+                    problem.as_ptr().cast(),
+                    (*parser).problem_mark,
+                    Some((*parser).problem_offset),
+                )
             }),
             context: NonNull::new((*parser).context as *mut i8).map(|context| {
-                LocatedError::from_parts(context.as_ptr().cast(), (*parser).context_mark)
+                LocatedError::from_parts(context.as_ptr().cast(), (*parser).context_mark, None)
             }),
         }
     }
@@ -216,29 +220,41 @@ impl Display for ParserError {
 #[derive(Debug)]
 struct LocatedError {
     description: String,
+    pos: u64,
     line: u64,
     column: u64,
 }
 
 impl LocatedError {
-    unsafe fn from_parts(description: *const i8, mark: yaml_mark_t) -> Self {
+    unsafe fn from_parts(
+        description: *const i8,
+        mark: yaml_mark_t,
+        override_pos: Option<u64>,
+    ) -> Self {
         Self {
             description: CStr::from_ptr(description).to_string_lossy().into_owned(),
-            line: mark.line,
-            column: mark.column,
+            line: mark.line + 1,
+            column: mark.column + 1,
+            pos: if mark.index > 0 {
+                mark.index
+            } else {
+                override_pos.unwrap_or(0)
+            },
         }
     }
 }
 
 impl Display for LocatedError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{} at line {} column {}",
-            self.description,
-            self.line + 1,
-            self.column + 1,
-        )
+        if self.line == 1 && self.column == 1 {
+            write!(f, "{} at position {}", self.description, self.pos)
+        } else {
+            write!(
+                f,
+                "{} at line {} column {}",
+                self.description, self.line, self.column,
+            )
+        }
     }
 }
 
