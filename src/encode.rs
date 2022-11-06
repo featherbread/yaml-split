@@ -7,7 +7,8 @@ where
     S: Iterator<Item = io::Result<char>>,
 {
     source: S,
-    remainder: Cursor<Vec<u8>>,
+    remainder: Cursor<[u8; MAX_UTF8_ENCODED_LEN]>,
+    remainder_len: usize,
 }
 
 impl<S> UTF8Encoder<S>
@@ -17,7 +18,8 @@ where
     pub fn new(source: S) -> Self {
         Self {
             source,
-            remainder: Cursor::new(Vec::new()),
+            remainder: Cursor::new([0u8; MAX_UTF8_ENCODED_LEN]),
+            remainder_len: 0,
         }
     }
 }
@@ -31,12 +33,13 @@ where
 
         // First, emit the remainder of any character that a previous read could
         // not fully emit.
-        if !self.remainder.get_ref().is_empty() {
-            let len = std::cmp::min(buf.len(), self.remainder.get_ref().len());
+        if self.remainder_len > 0 {
+            let len = std::cmp::min(buf.len(), self.remainder_len);
             self.remainder.read_exact(&mut buf[..len])?;
             buf = &mut buf[len..];
             written += len;
-            if buf.is_empty() {
+            self.remainder_len -= len;
+            if self.remainder_len > 0 {
                 return Ok(written);
             }
         }
@@ -70,8 +73,11 @@ where
             buf[..emit_len].copy_from_slice(&tmp[..emit_len]);
             buf = &mut buf[emit_len..];
             written += emit_len;
+
             if buf.is_empty() {
+                self.remainder.set_position(0);
                 self.remainder.write_all(&tmp[emit_len..char_len])?;
+                self.remainder_len = char_len - emit_len;
             }
         }
 
