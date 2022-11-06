@@ -47,19 +47,20 @@ struct Cli {
     inputfile: Option<PathBuf>,
 }
 
+/// Parses a text encoding name in a **ridiculously** loose manner.
 fn try_parse_encoding(arg: &str) -> Result<Encoding, String> {
     let arg = arg.to_lowercase();
     let endianness = match &arg {
-        arg if arg.contains("be") => Endianness::Big,
-        arg if arg.contains("le") => Endianness::Little,
+        arg if arg.contains('b') => Endianness::Big,
+        arg if arg.contains('l') => Endianness::Little,
         _ => return Err(format!("can't determine endianness of '{arg}'")),
     };
     Ok(match &arg {
-        arg if arg.contains("16") => match endianness {
+        arg if arg.contains(['1', '6']) => match endianness {
             Endianness::Big => Encoding::UTF16BE,
             Endianness::Little => Encoding::UTF16LE,
         },
-        arg if arg.contains("32") => match endianness {
+        arg if arg.contains(['3', '2']) => match endianness {
             Endianness::Big => Encoding::UTF32BE,
             Endianness::Little => Encoding::UTF32LE,
         },
