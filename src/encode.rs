@@ -201,6 +201,10 @@ where
     type Item = io::Result<char>;
 
     fn next(&mut self) -> Option<Self::Item> {
+        // This is based on the implementation of `std::char::DecodeUtf16` from
+        // the standard library, but is reworked for improved error handling and
+        // (hopefully) a bit more readability.
+
         let pos = self.pos;
         let lead = match self.buf.take() {
             Some(u) => u,
