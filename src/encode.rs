@@ -77,6 +77,7 @@ where
             if buf.is_empty() {
                 self.remainder.set_position(0);
                 self.remainder.write_all(&tmp[emit_len..char_len])?;
+                self.remainder.set_position(0);
                 self.remainder_len = char_len - emit_len;
             }
         }
