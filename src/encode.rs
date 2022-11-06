@@ -393,7 +393,7 @@ where
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "invalid or unexpected UTF-{} code unit {:x} at byte {}",
+            "invalid or unexpected UTF-{} code unit 0x{:x} at byte {}",
             Self::BIT_SIZE,
             self.unit,
             self.pos,
