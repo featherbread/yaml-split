@@ -5,7 +5,7 @@ use std::io::{self, BufRead, Read};
 const MAX_UTF8_ENCODED_LEN: usize = 4;
 
 /// Represents possible source encodings.
-#[allow(dead_code)]
+#[derive(Debug)]
 pub enum Encoding {
     UTF16BE,
     UTF16LE,
@@ -22,12 +22,12 @@ impl Encoding {
     {
         let endianness = self.endianness();
         match self {
-            Encoding::UTF16BE | Encoding::UTF16LE => {
-                Box::new(UTF8Encoder::new(UTF16Decoder::new(source, endianness)))
-            }
-            Encoding::UTF32BE | Encoding::UTF32LE => {
-                Box::new(UTF8Encoder::new(UTF32Decoder::new(source, endianness)))
-            }
+            Encoding::UTF16BE | Encoding::UTF16LE => Box::new(UTF8Encoder::new(
+                UTF16Decoder::new(source, endianness).filter(is_not_bom),
+            )),
+            Encoding::UTF32BE | Encoding::UTF32LE => Box::new(UTF8Encoder::new(
+                UTF32Decoder::new(source, endianness).filter(is_not_bom),
+            )),
         }
     }
 
@@ -36,6 +36,13 @@ impl Encoding {
             Encoding::UTF16BE | Encoding::UTF32BE => Endianness::Big,
             Encoding::UTF16LE | Encoding::UTF32LE => Endianness::Little,
         }
+    }
+}
+
+fn is_not_bom(result: &Result<char, io::Error>) -> bool {
+    match result {
+        Err(_) => true,
+        Ok(ch) => *ch != '\u{FEFF}',
     }
 }
 

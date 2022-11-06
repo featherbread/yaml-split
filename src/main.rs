@@ -1,28 +1,31 @@
 use std::fs::File;
-use std::io::{self, BufReader, BufWriter};
+use std::io::{self, BufRead, BufReader};
 use std::path::PathBuf;
 
 use clap::Parser;
 
 mod encode;
-#[allow(dead_code)]
 mod split;
 
 use encode::{Encoding, Endianness};
+use split::Splitter;
 
 fn main() {
     let cli = Cli::parse();
-    let mut w = BufWriter::new(io::stdout());
-    let mut r = match cli.inputfile {
-        None => cli.from_code.utf8_reader(io::stdin().lock()),
-        Some(filename) => cli
-            .from_code
-            .utf8_reader(BufReader::new(File::open(filename).unwrap())),
+
+    let input: Box<dyn BufRead> = match cli.inputfile {
+        None => Box::new(io::stdin().lock()),
+        Some(filename) => Box::new(BufReader::new(File::open(filename).unwrap())),
     };
-    if let Err(err) = io::copy(&mut r, &mut w) {
-        if err.kind() != io::ErrorKind::BrokenPipe {
-            panic!("{}", err);
-        }
+
+    println!("{:?}", cli.from_code);
+    let reader: Box<dyn BufRead> = match cli.from_code {
+        None => input,
+        Some(code) => Box::new(BufReader::new(code.utf8_reader(input))),
+    };
+
+    for (event_type, index) in Splitter::new(reader) {
+        println!("type = {} @ index = {}", event_type, index);
     }
 }
 
@@ -35,7 +38,7 @@ struct Cli {
         help = "Specifies the encoding of the input",
         parse(try_from_str = try_parse_encoding),
     )]
-    from_code: Encoding,
+    from_code: Option<Encoding>,
 
     #[clap(
         name = "inputfile",
