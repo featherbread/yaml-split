@@ -1,5 +1,5 @@
 use std::error::Error;
-use std::fmt::Display;
+use std::fmt::{Debug, Display, LowerHex};
 use std::io::{self, BufRead, Read};
 
 const MAX_UTF8_ENCODED_LEN: usize = 4;
@@ -223,7 +223,7 @@ where
 
         if lead >= 0xDC00 {
             // Invalid: a UTF-16 trailing surrogate with no leading surrogate.
-            return Some(Err(InvalidUTF16Error::new(lead, pos).into()));
+            return Some(Err(EncodingError::new(lead, pos).into()));
         }
 
         let pos = self.pos;
@@ -236,7 +236,7 @@ where
             // Invalid: we needed a trailing surrogate and didn't get one. We'll
             // try to decode this as a leading code unit on the next iteration.
             self.buf = Some(trail);
-            return Some(Err(InvalidUTF16Error::new(trail, pos).into()));
+            return Some(Err(EncodingError::new(trail, pos).into()));
         }
 
         // At this point, we are confident that we have valid leading and
@@ -244,36 +244,6 @@ where
         let ch = 0x1_0000 + (((lead - 0xD800) as u32) << 10 | (trail - 0xDC00) as u32);
         // SAFETY: We have confirmed that the surrogate pair is valid.
         Some(Ok(unsafe { char::from_u32_unchecked(ch as u32) }))
-    }
-}
-
-#[derive(Debug)]
-struct InvalidUTF16Error {
-    unit: u16,
-    pos: u64,
-}
-
-impl InvalidUTF16Error {
-    fn new(unit: u16, pos: u64) -> Self {
-        Self { unit, pos }
-    }
-}
-
-impl From<InvalidUTF16Error> for io::Error {
-    fn from(err: InvalidUTF16Error) -> io::Error {
-        io::Error::new(io::ErrorKind::InvalidData, err)
-    }
-}
-
-impl Error for InvalidUTF16Error {}
-
-impl Display for InvalidUTF16Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "invalid or unexpected UTF-16 code unit {:x} at byte {}",
-            self.unit, self.pos,
-        )
     }
 }
 
@@ -323,37 +293,47 @@ where
         let unit = self.endianness.decode_u32(next);
         Some(match char::from_u32(unit) {
             Some(ch) => Ok(ch),
-            None => Err(InvalidUTF32Error::new(unit, pos).into()),
+            None => Err(EncodingError::new(unit, pos).into()),
         })
     }
 }
 
 #[derive(Debug)]
-struct InvalidUTF32Error {
-    unit: u32,
+struct EncodingError<T> {
+    unit: T,
     pos: u64,
 }
 
-impl InvalidUTF32Error {
-    fn new(unit: u32, pos: u64) -> Self {
+impl<T> EncodingError<T> {
+    const BIT_SIZE: usize = std::mem::size_of::<T>() * 8;
+
+    fn new(unit: T, pos: u64) -> Self {
         Self { unit, pos }
     }
 }
 
-impl From<InvalidUTF32Error> for io::Error {
-    fn from(err: InvalidUTF32Error) -> Self {
+impl<T> From<EncodingError<T>> for io::Error
+where
+    T: Debug + LowerHex + Send + Sync + 'static,
+{
+    fn from(err: EncodingError<T>) -> Self {
         io::Error::new(io::ErrorKind::InvalidData, err)
     }
 }
 
-impl Error for InvalidUTF32Error {}
+impl<T> Error for EncodingError<T> where T: Debug + LowerHex + Send + Sync + 'static {}
 
-impl Display for InvalidUTF32Error {
+impl<T> Display for EncodingError<T>
+where
+    T: Debug + LowerHex,
+{
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "invalid UTF-32 code unit {:x} at byte {}",
-            self.unit, self.pos,
+            "invalid or unexpected UTF-{} code unit {:x} at byte {}",
+            Self::BIT_SIZE,
+            self.unit,
+            self.pos,
         )
     }
 }
