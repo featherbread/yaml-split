@@ -14,6 +14,20 @@ pub enum Encoding {
 }
 
 impl Encoding {
+    pub fn utf8_reader<'r, R>(&self, r: R) -> Box<dyn Read + 'r>
+    where
+        R: BufRead + 'r,
+    {
+        match self {
+            Encoding::UTF16BE | Encoding::UTF16LE => {
+                Box::new(UTF8Encoder::new(UTF16Decoder::new(r, self.endianness())))
+            }
+            Encoding::UTF32BE | Encoding::UTF32LE => {
+                Box::new(UTF8Encoder::new(UTF32Decoder::new(r, self.endianness())))
+            }
+        }
+    }
+
     fn endianness(&self) -> Endianness {
         match self {
             Encoding::UTF16BE | Encoding::UTF32BE => Endianness::Big,
@@ -63,22 +77,6 @@ where
             source,
             remainder: Buffer::new(),
         }
-    }
-}
-
-impl<'r> UTF8Encoder<Box<dyn Iterator<Item = io::Result<char>> + 'r>> {
-    pub fn from_reader<R>(r: R, encoding: Encoding) -> Self
-    where
-        R: BufRead + 'r,
-    {
-        Self::new(match encoding {
-            enc @ (Encoding::UTF16BE | Encoding::UTF16LE) => {
-                Box::new(UTF16Decoder::new(r, enc.endianness()))
-            }
-            enc @ (Encoding::UTF32BE | Encoding::UTF32LE) => {
-                Box::new(UTF32Decoder::new(r, enc.endianness()))
-            }
-        })
     }
 }
 
