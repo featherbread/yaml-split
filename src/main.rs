@@ -10,7 +10,9 @@ static HELLO_UTF32BE: &[u8] = include_bytes!("hello-utf32be.txt");
 static HELLO_UTF16LE: &[u8] = include_bytes!("hello-utf16le.txt");
 
 fn main() {
-    Splitter::new();
+    {
+        Splitter::new();
+    }
     println!("Splitter didn't crash!");
 
     print_string(Encoding::UTF16LE.utf8_reader(HELLO_UTF16LE));

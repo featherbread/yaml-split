@@ -4,7 +4,7 @@ use std::io::{self, BufRead, Read};
 
 const MAX_UTF8_ENCODED_LEN: usize = 4;
 
-/// Represents possible source encodings for the encoder.
+/// Represents possible source encodings.
 #[allow(dead_code)]
 pub enum Encoding {
     UTF16BE,
@@ -14,16 +14,19 @@ pub enum Encoding {
 }
 
 impl Encoding {
-    pub fn utf8_reader<'r, R>(&self, r: R) -> Box<dyn Read + 'r>
+    /// Returns a reader that translates from the source encoding to UTF-8 as it
+    /// reads.
+    pub fn utf8_reader<'r, R>(&self, source: R) -> Box<dyn Read + 'r>
     where
         R: BufRead + 'r,
     {
+        let endianness = self.endianness();
         match self {
             Encoding::UTF16BE | Encoding::UTF16LE => {
-                Box::new(UTF8Encoder::new(UTF16Decoder::new(r, self.endianness())))
+                Box::new(UTF8Encoder::new(UTF16Decoder::new(source, endianness)))
             }
             Encoding::UTF32BE | Encoding::UTF32LE => {
-                Box::new(UTF8Encoder::new(UTF32Decoder::new(r, self.endianness())))
+                Box::new(UTF8Encoder::new(UTF32Decoder::new(source, endianness)))
             }
         }
     }
