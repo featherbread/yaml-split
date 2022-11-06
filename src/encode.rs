@@ -299,12 +299,23 @@ where
 }
 
 #[derive(Debug)]
-struct EncodingError<T> {
+struct EncodingError<T>
+where
+    T: CodeUnit,
+{
     unit: T,
     pos: u64,
 }
 
-impl<T> EncodingError<T> {
+trait CodeUnit: Debug + LowerHex + Send + Sync + 'static {}
+
+impl CodeUnit for u16 {}
+impl CodeUnit for u32 {}
+
+impl<T> EncodingError<T>
+where
+    T: CodeUnit,
+{
     const BIT_SIZE: usize = std::mem::size_of::<T>() * 8;
 
     fn new(unit: T, pos: u64) -> Self {
@@ -314,18 +325,18 @@ impl<T> EncodingError<T> {
 
 impl<T> From<EncodingError<T>> for io::Error
 where
-    T: Debug + LowerHex + Send + Sync + 'static,
+    T: CodeUnit,
 {
     fn from(err: EncodingError<T>) -> Self {
         io::Error::new(io::ErrorKind::InvalidData, err)
     }
 }
 
-impl<T> Error for EncodingError<T> where T: Debug + LowerHex + Send + Sync + 'static {}
+impl<T> Error for EncodingError<T> where T: CodeUnit {}
 
 impl<T> Display for EncodingError<T>
 where
-    T: Debug + LowerHex,
+    T: CodeUnit,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
