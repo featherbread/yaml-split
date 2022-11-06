@@ -47,7 +47,8 @@ where
 
         // SAFETY: After Splitter takes ownership of the provided reader, this
         // is the only place where it is ever used prior to being dropped, so we
-        // do not expect any aliasing.
+        // do not expect any aliasing (except, that doesn't actually matter for
+        // raw pointers, does it?).
         let len = match unsafe { (*reader.cast::<R>()).read(buf) } {
             Ok(len) => len,
             Err(_) => return FAIL,
