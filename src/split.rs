@@ -98,7 +98,10 @@ where
                 YAML_STREAM_END_EVENT => None,
                 YAML_DOCUMENT_START_EVENT => Some((event.type_ as u32, event.start_mark.index)),
                 YAML_DOCUMENT_END_EVENT => Some((event.type_ as u32, event.end_mark.index)),
-                _ => continue,
+                _ => {
+                    unsafe { yaml_event_delete(&mut event) };
+                    continue;
+                }
             };
             unsafe { yaml_event_delete(&mut event) };
             return result;
