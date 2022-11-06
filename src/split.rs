@@ -3,13 +3,13 @@ use std::io::Read;
 use std::mem::MaybeUninit;
 use std::pin::Pin;
 
-use unsafe_libyaml as sys;
+use unsafe_libyaml::*;
 
 pub struct Splitter<R>
 where
     R: Read,
 {
-    parser: Pin<Box<sys::yaml_parser_t>>,
+    parser: Pin<Box<yaml_parser_t>>,
     reader: Pin<Box<R>>,
 }
 
@@ -20,9 +20,9 @@ where
     pub fn new(reader: R) -> Self {
         let reader = Box::pin(reader);
 
-        let mut parser_uninit = Box::pin(MaybeUninit::<sys::yaml_parser_t>::uninit());
+        let mut parser_uninit = Box::pin(MaybeUninit::<yaml_parser_t>::zeroed());
         // SAFETY: libyaml is assumed to be correct.
-        if unsafe { sys::yaml_parser_initialize(parser_uninit.as_mut_ptr()).fail } {
+        if unsafe { yaml_parser_initialize(parser_uninit.as_mut_ptr()).fail } {
             panic!("failed to initialize YAML parser");
         }
         // SAFETY: MaybeUninit<T> is guaranteed by the standard library to have
@@ -30,10 +30,9 @@ where
         // to the "Initializing an array element-by-element" example in the
         // MaybeUninit docs.
         let parser = unsafe {
-            std::mem::transmute::<
-                Pin<Box<MaybeUninit<sys::yaml_parser_t>>>,
-                Pin<Box<sys::yaml_parser_t>>,
-            >(parser_uninit)
+            std::mem::transmute::<Pin<Box<MaybeUninit<yaml_parser_t>>>, Pin<Box<yaml_parser_t>>>(
+                parser_uninit,
+            )
         };
 
         let mut splitter = Self { parser, reader };
@@ -41,14 +40,14 @@ where
         // I haven't even attempted to run this and I'm already having
         // nightmares about it.
         unsafe {
-            sys::yaml_parser_set_input(
+            yaml_parser_set_input(
                 splitter.parser.as_mut().get_unchecked_mut(),
                 Self::read_callback,
                 splitter.reader.as_mut().get_unchecked_mut() as *mut R as *mut c_void,
             );
-            sys::yaml_parser_set_encoding(
+            yaml_parser_set_encoding(
                 splitter.parser.as_mut().get_unchecked_mut(),
-                sys::YAML_UTF8_ENCODING,
+                YAML_UTF8_ENCODING,
             );
         }
 
@@ -82,11 +81,9 @@ where
     fn next(&mut self) -> Option<Self::Item> {
         loop {
             let mut event = unsafe {
-                let mut event: MaybeUninit<sys::yaml_event_t> = MaybeUninit::uninit();
-                let result = sys::yaml_parser_parse(
-                    self.parser.as_mut().get_unchecked_mut(),
-                    event.as_mut_ptr(),
-                );
+                let mut event: MaybeUninit<yaml_event_t> = MaybeUninit::uninit();
+                let result =
+                    yaml_parser_parse(self.parser.as_mut().get_unchecked_mut(), event.as_mut_ptr());
                 if result.fail {
                     let problem_str = CStr::from_ptr(self.parser.problem).to_str().unwrap();
                     panic!(
@@ -98,14 +95,12 @@ where
             };
 
             let result = match event.type_ {
-                sys::YAML_STREAM_END_EVENT => None,
-                sys::YAML_DOCUMENT_START_EVENT => {
-                    Some((event.type_ as u32, event.start_mark.index))
-                }
-                sys::YAML_DOCUMENT_END_EVENT => Some((event.type_ as u32, event.end_mark.index)),
+                YAML_STREAM_END_EVENT => None,
+                YAML_DOCUMENT_START_EVENT => Some((event.type_ as u32, event.start_mark.index)),
+                YAML_DOCUMENT_END_EVENT => Some((event.type_ as u32, event.end_mark.index)),
                 _ => continue,
             };
-            unsafe { sys::yaml_event_delete(&mut event) };
+            unsafe { yaml_event_delete(&mut event) };
             return result;
         }
     }
@@ -116,6 +111,6 @@ where
     R: Read,
 {
     fn drop(&mut self) {
-        unsafe { sys::yaml_parser_delete(self.parser.as_mut().get_unchecked_mut()) }
+        unsafe { yaml_parser_delete(self.parser.as_mut().get_unchecked_mut()) }
     }
 }

@@ -5,7 +5,6 @@ use std::path::PathBuf;
 use clap::Parser;
 
 mod encode;
-#[allow(clippy::unsafe_removed_from_name)]
 mod split;
 
 use encode::{Encoding, Endianness};
