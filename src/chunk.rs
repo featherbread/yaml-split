@@ -8,6 +8,7 @@ use std::ptr::NonNull;
 
 use unsafe_libyaml::*;
 
+/// An iterator over individual raw documents in a UTF-8-encoded YAML stream.
 pub struct Chunker<R>
 where
     R: Read,
@@ -16,6 +17,7 @@ where
     read_state: *mut ReadState<R>,
 }
 
+/// The state for the libyaml input callback.
 struct ReadState<R>
 where
     R: Read,
@@ -28,6 +30,15 @@ impl<R> Chunker<R>
 where
     R: Read,
 {
+    /// Creates a new chunker for the YAML stream read from the reader.
+    ///
+    /// While YAML 1.2 allows a number of different text encodings for YAML
+    /// streams, the chunker requires the provided stream to be UTF-8.
+    /// Furthermore, the chunker's YAML parser does not properly handle the
+    /// presence of Unicode byte order marks as defined by section 5.2 of the
+    /// specification. Before chunking a YAML stream, you may need to detect its
+    /// encoding following the steps in 5.2 of the specification, re-encode it
+    /// to UTF-8, and strip any initial BOM in a separate step.
     pub fn new(reader: R) -> Self {
         // SAFETY: libyaml code is assumed to be correct. To avoid leaking
         // memory, we don't unbox the pointer until after the panic attempt.
@@ -91,7 +102,7 @@ impl<R> Iterator for Chunker<R>
 where
     R: Read,
 {
-    type Item = io::Result<Vec<u8>>;
+    type Item = io::Result<String>;
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
@@ -101,14 +112,12 @@ where
                 match Event::from_parser(self.parser) {
                     Ok(event) => event,
                     Err(()) => {
-                        return if let Some(err) = (*self.read_state).error.take() {
-                            Some(Err(err))
-                        } else {
-                            Some(Err(io::Error::new(
+                        return Some(Err((*self.read_state).error.take().unwrap_or_else(|| {
+                            io::Error::new(
                                 io::ErrorKind::InvalidData,
                                 ParserError::from_parser(self.parser),
-                            )))
-                        }
+                            )
+                        })))
                     }
                 }
             };
@@ -116,17 +125,19 @@ where
             match event.type_ {
                 YAML_STREAM_END_EVENT => return None,
                 YAML_DOCUMENT_START_EVENT => {
-                    let pos = event.start_mark.index;
+                    let offset = event.start_mark.index;
                     // SAFETY: We properly initialized self.read_state when the
                     // Chunker was constructed.
-                    unsafe { (*self.read_state).reader.trim_to_start(pos) };
+                    unsafe { (*self.read_state).reader.trim_to_offset(offset) };
                 }
                 YAML_DOCUMENT_END_EVENT => {
-                    let pos = event.end_mark.index;
+                    let offset = event.end_mark.index;
                     // SAFETY: We properly initialized self.read_state when the
                     // Chunker was constructed.
-                    let chunk = unsafe { (*self.read_state).reader.take_to_end(pos) };
-                    return Some(Ok(chunk));
+                    let chunk = unsafe { (*self.read_state).reader.take_to_offset(offset) };
+                    // SAFETY: libyaml validates that the input is UTF-8 during
+                    // parsing.
+                    return Some(Ok(unsafe { String::from_utf8_unchecked(chunk) }));
                 }
                 _ => {}
             };
@@ -149,6 +160,7 @@ where
     }
 }
 
+/// A libyaml event.
 struct Event(*mut yaml_event_t);
 
 impl Event {
@@ -166,7 +178,7 @@ impl Deref for Event {
 
     fn deref(&self) -> &Self::Target {
         // SAFETY: We never expose the raw pointer externally, so there should
-        // be no opportunity to violate aliasing rules.
+        // be no opportunity to violate aliasing rules by creating a &mut.
         unsafe { &*self.0 }
     }
 }
@@ -180,6 +192,7 @@ impl Drop for Event {
     }
 }
 
+/// A libyaml parser error including context.
 #[derive(Debug)]
 struct ParserError {
     problem: Option<LocatedError>,
@@ -217,10 +230,11 @@ impl Display for ParserError {
     }
 }
 
+/// A libyaml parser error with location information.
 #[derive(Debug)]
 struct LocatedError {
     description: String,
-    pos: u64,
+    offset: u64,
     line: u64,
     column: u64,
 }
@@ -229,17 +243,16 @@ impl LocatedError {
     unsafe fn from_parts(
         description: *const i8,
         mark: yaml_mark_t,
-        override_pos: Option<u64>,
+        override_offset: Option<u64>,
     ) -> Self {
         Self {
             description: CStr::from_ptr(description).to_string_lossy().into_owned(),
             line: mark.line + 1,
             column: mark.column + 1,
-            pos: if mark.index > 0 {
-                mark.index
-            } else {
-                override_pos.unwrap_or(0)
-            },
+            offset: (mark.index > 0)
+                .then_some(mark.index)
+                .or(override_offset)
+                .unwrap_or(0),
         }
     }
 }
@@ -247,7 +260,7 @@ impl LocatedError {
 impl Display for LocatedError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if self.line == 1 && self.column == 1 {
-            write!(f, "{} at position {}", self.description, self.pos)
+            write!(f, "{} at position {}", self.description, self.offset)
         } else {
             write!(
                 f,
@@ -258,13 +271,14 @@ impl Display for LocatedError {
     }
 }
 
+/// A reader that captures bytes read from a source and provides them in chunks.
 struct ChunkReader<R>
 where
     R: Read,
 {
     reader: R,
-    capture: Vec<u8>,
-    capture_start_pos: u64,
+    captured: Vec<u8>,
+    captured_start_offset: u64,
 }
 
 impl<R> ChunkReader<R>
@@ -274,22 +288,26 @@ where
     fn new(reader: R) -> Self {
         Self {
             reader,
-            capture: vec![],
-            capture_start_pos: 0,
+            captured: vec![],
+            captured_start_offset: 0,
         }
     }
 
-    fn trim_to_start(&mut self, pos: u64) {
-        let excess_start_len = (pos - self.capture_start_pos) as usize;
-        self.capture_start_pos = pos;
-        self.capture.drain(..excess_start_len);
+    /// Trims from the start of the capture buffer so the next chunk will begin
+    /// at the specified reader offset.
+    fn trim_to_offset(&mut self, offset: u64) {
+        let trim_len = (offset - self.captured_start_offset) as usize;
+        self.captured_start_offset = offset;
+        self.captured.drain(..trim_len);
     }
 
-    fn take_to_end(&mut self, pos: u64) -> Vec<u8> {
-        let take_len = (pos - self.capture_start_pos) as usize;
-        let tail = self.capture.split_off(take_len);
-        self.capture_start_pos = pos;
-        mem::replace(&mut self.capture, tail)
+    /// Takes the chunk from the start of the capture buffer up to the specified
+    /// reader offset, leaving bytes beyond the offset in the capture buffer.
+    fn take_to_offset(&mut self, offset: u64) -> Vec<u8> {
+        let take_len = (offset - self.captured_start_offset) as usize;
+        let tail = self.captured.split_off(take_len);
+        self.captured_start_offset = offset;
+        mem::replace(&mut self.captured, tail)
     }
 }
 
@@ -304,7 +322,7 @@ where
         // that we know were freshly written, unless of course the source is
         // broken and lies about how many bytes it read.
         let len = self.reader.read(buf)?;
-        self.capture.extend_from_slice(&buf[..len]);
+        self.captured.extend_from_slice(&buf[..len]);
         Ok(len)
     }
 }

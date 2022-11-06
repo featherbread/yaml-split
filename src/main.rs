@@ -30,7 +30,7 @@ fn main() {
             Ok(chunk) => println!(
                 ">>> START CHUNK ({} bytes) >>>|{}|<<< END CHUNK <<<",
                 chunk.len(),
-                std::str::from_utf8(&chunk).unwrap()
+                chunk,
             ),
         }
     }
