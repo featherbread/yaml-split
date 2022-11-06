@@ -68,15 +68,14 @@ where
     fn next(&mut self) -> Option<Self::Item> {
         loop {
             let mut event = unsafe {
+                let parser = &mut *self.parser;
                 let mut event: MaybeUninit<yaml_event_t> = MaybeUninit::uninit();
-                let result = yaml_parser_parse(self.parser, event.as_mut_ptr());
-                if result.fail {
-                    let problem_str = CStr::from_ptr((*self.parser).problem).to_str().unwrap();
+                if yaml_parser_parse(parser, event.as_mut_ptr()).fail {
                     panic!(
-                        "something bad happened ({}): {} @ {}",
-                        (*self.parser).error as u32,
-                        problem_str,
-                        (*self.parser).problem_offset,
+                        "parser error (code = {}, offset = {}): {}",
+                        parser.error as u32,
+                        parser.problem_offset,
+                        CStr::from_ptr(parser.problem).to_string_lossy(),
                     );
                 }
                 event.assume_init()
