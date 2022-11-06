@@ -1,6 +1,3 @@
-#[allow(dead_code)]
-mod buffer;
-#[allow(dead_code)]
 mod encode;
 mod split;
 
