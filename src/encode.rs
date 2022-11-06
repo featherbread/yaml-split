@@ -1,3 +1,5 @@
+use std::error::Error;
+use std::fmt::Display;
 use std::io::{self, BufRead, Read};
 
 const MAX_UTF8_ENCODED_LEN: usize = 4;
@@ -154,12 +156,13 @@ impl Endianness {
     }
 }
 
-/// A streaming lossy UTF-16 decoder.
+/// A streaming UTF-16 decoder.
 pub struct UTF16Decoder<R>
 where
     R: BufRead,
 {
     source: R,
+    pos: u64,
     endianness: Endianness,
     buf: Option<u16>,
 }
@@ -171,6 +174,7 @@ where
     pub fn new(source: R, endianness: Endianness) -> Self {
         Self {
             source,
+            pos: 0,
             endianness,
             buf: None,
         }
@@ -183,9 +187,10 @@ where
             _ => {}
         };
 
-        let mut buf = [0u8; 2];
-        self.source.read_exact(&mut buf)?;
-        Ok(Some(self.endianness.decode_u16(buf)))
+        let mut next = [0u8; 2];
+        self.source.read_exact(&mut next)?;
+        self.pos += next.len() as u64;
+        Ok(Some(self.endianness.decode_u16(next)))
     }
 }
 
@@ -196,6 +201,7 @@ where
     type Item = io::Result<char>;
 
     fn next(&mut self) -> Option<Self::Item> {
+        let pos = self.pos;
         let lead = match self.buf.take() {
             Some(u) => u,
             None => match self.next_u16() {
@@ -213,19 +219,20 @@ where
 
         if lead >= 0xDC00 {
             // Invalid: a UTF-16 trailing surrogate with no leading surrogate.
-            return Some(Ok(char::REPLACEMENT_CHARACTER));
+            return Some(Err(InvalidUTF16Error::new(lead, pos).into()));
         }
 
+        let pos = self.pos;
         let trail = match self.next_u16() {
             Ok(Some(u)) => u,
-            Ok(None) => return Some(Ok(char::REPLACEMENT_CHARACTER)),
+            Ok(None) => return Some(Err(io::ErrorKind::UnexpectedEof.into())),
             Err(err) => return Some(Err(err)),
         };
         if !(0xDC00..=0xDFFF).contains(&trail) {
             // Invalid: we needed a trailing surrogate and didn't get one. We'll
             // try to decode this as a leading code unit on the next iteration.
             self.buf = Some(trail);
-            return Some(Ok(char::REPLACEMENT_CHARACTER));
+            return Some(Err(InvalidUTF16Error::new(trail, pos).into()));
         }
 
         // At this point, we are confident that we have valid leading and
@@ -236,12 +243,43 @@ where
     }
 }
 
-/// A streaming lossy UTF-32 decoder.
+#[derive(Debug)]
+struct InvalidUTF16Error {
+    unit: u16,
+    pos: u64,
+}
+
+impl InvalidUTF16Error {
+    fn new(unit: u16, pos: u64) -> Self {
+        Self { unit, pos }
+    }
+}
+
+impl From<InvalidUTF16Error> for io::Error {
+    fn from(err: InvalidUTF16Error) -> io::Error {
+        io::Error::new(io::ErrorKind::InvalidData, err)
+    }
+}
+
+impl Error for InvalidUTF16Error {}
+
+impl Display for InvalidUTF16Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "invalid or unexpected UTF-16 code unit {:x} at byte {}",
+            self.unit, self.pos,
+        )
+    }
+}
+
+/// A streaming UTF-32 decoder.
 pub struct UTF32Decoder<R>
 where
     R: BufRead,
 {
     source: R,
+    pos: u64,
     endianness: Endianness,
 }
 
@@ -250,7 +288,11 @@ where
     R: BufRead,
 {
     pub fn new(source: R, endianness: Endianness) -> Self {
-        Self { source, endianness }
+        Self {
+            source,
+            pos: 0,
+            endianness,
+        }
     }
 }
 
@@ -267,13 +309,47 @@ where
             _ => {}
         };
 
+        let pos = self.pos;
         let mut next = [0u8; 4];
         if let Err(err) = self.source.read_exact(&mut next) {
             return Some(Err(err));
         }
+        self.pos += next.len() as u64;
 
-        Some(Ok(
-            char::from_u32(self.endianness.decode_u32(next)).unwrap_or(char::REPLACEMENT_CHARACTER)
-        ))
+        let unit = self.endianness.decode_u32(next);
+        Some(match char::from_u32(unit) {
+            Some(ch) => Ok(ch),
+            None => Err(InvalidUTF32Error::new(unit, pos).into()),
+        })
+    }
+}
+
+#[derive(Debug)]
+struct InvalidUTF32Error {
+    unit: u32,
+    pos: u64,
+}
+
+impl InvalidUTF32Error {
+    fn new(unit: u32, pos: u64) -> Self {
+        Self { unit, pos }
+    }
+}
+
+impl From<InvalidUTF32Error> for io::Error {
+    fn from(err: InvalidUTF32Error) -> Self {
+        io::Error::new(io::ErrorKind::InvalidData, err)
+    }
+}
+
+impl Error for InvalidUTF32Error {}
+
+impl Display for InvalidUTF32Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "invalid UTF-32 code unit {:x} at byte {}",
+            self.unit, self.pos,
+        )
     }
 }
