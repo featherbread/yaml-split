@@ -45,13 +45,13 @@ impl<R> Chunker<R>
 where
     R: Read,
 {
-    /// Creates a new chunker for the YAML stream read from the reader.
+    /// Creates a new chunker for the YAML stream produced by the reader.
     ///
     /// YAML 1.2 allows several different text encodings for YAML streams, as
     /// well as the presence of byte order marks at the start of the stream or
-    /// individual documents. However, `Chunker` does not fully support the
-    /// spec, and requires a UTF-8 stream without BOMs. You may need to
-    /// re-encode your input stream and strip BOMs in a separate step.
+    /// individual documents. However, `Chunker` requires a UTF-8 stream without
+    /// BOMs. Consider using the [`encoding`](super::encoding) module to
+    /// re-encode non-UTF-8 streams.
     pub fn new(reader: R) -> Self {
         // SAFETY: libyaml is assumed to be correct. To avoid leaking memory, we
         // don't unbox the pointer until after the panic attempt.
