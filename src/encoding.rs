@@ -9,6 +9,48 @@ use std::io::{self, BufRead, Read};
 /// per [`char::encode_utf8`].
 const MAX_UTF8_ENCODED_LEN: usize = 4;
 
+/// The possible text encodings of a valid YAML 1.2 stream.
+pub enum Encoding {
+    UTF8,
+    UTF16BE,
+    UTF16LE,
+    UTF32BE,
+    UTF32LE,
+}
+
+impl Encoding {
+    /// Detects the text encoding of a YAML 1.2 stream based on its leading
+    /// bytes.
+    ///
+    /// The detection algorithm is defined in [section 5.2 of the YAML 1.22
+    /// specification][spec], and relies on the fact that a valid YAML stream
+    /// must begin with either a Unicode byte order mark or an ASCII character.
+    /// Detection behavior for non-YAML inputs is not well-defined.
+    ///
+    /// The detector looks at up to 4 bytes of the prefix. If the prefix is less
+    /// than 4 bytes and the document is longer than the prefix, the result of
+    /// the detection may be incorrect.
+    ///
+    /// [spec]: https://yaml.org/spec/1.2.2/#52-character-encodings
+    pub fn detect(prefix: &[u8]) -> Encoding {
+        if let Some(Ok(prefix)) = prefix.get(0..4).map(TryInto::<[u8; 4]>::try_into) {
+            match prefix {
+                [0, 0, 0xFE, 0xFF] | [0, 0, 0, _] => return Encoding::UTF32BE,
+                [0xFF, 0xFE, 0, 0] | [_, 0, 0, 0] => return Encoding::UTF32LE,
+                _ => {}
+            };
+        }
+        if let Some(Ok(prefix)) = prefix.get(0..2).map(TryInto::<[u8; 2]>::try_into) {
+            match prefix {
+                [0xFE, 0xFF] | [0, _] => return Encoding::UTF16BE,
+                [0xFF, 0xFE] | [_, 0] => return Encoding::UTF16LE,
+                _ => {}
+            };
+        }
+        Encoding::UTF8
+    }
+}
+
 /// Reads a YAML 1.2 stream as UTF-8 regardless of its source encoding.
 ///
 /// A `Transcoder` detects the encoding of YAML 1.2 streams using the rules in
@@ -38,35 +80,26 @@ impl<R> Transcoder<R>
 where
     R: BufRead,
 {
-    /// Creates a transcoder for the provided reader.
-    pub fn new(mut reader: R) -> Self {
-        // Make a best effort to read the prefix. If there is an I/O error,
-        // we'll just assume that the input is UTF-8 and deal with the fallout
-        // later.
-        //
-        // TODO: There's no guarantee that `fill_buf` will give us 4 bytes even
-        // if there are 4 bytes available from the source.
-        let mut prefix = [0u8; 4];
-        let buf = reader.fill_buf().unwrap_or(&[]);
-        let len = min(buf.len(), prefix.len());
-        prefix[..len].copy_from_slice(&buf[..len]);
+    /// Creates a transcoder using a known source encoding.
+    pub fn new(reader: R, from: Encoding) -> Self {
+        use Encoding::*;
+        use Endianness::*;
+        use TranscoderKind::*;
 
-        // See https://yaml.org/spec/1.2.2/#52-character-encodings.
-        Self(match prefix {
-            [0, 0, 0xFE, 0xFF] | [0, 0, 0, _] if len == 4 => TranscoderKind::FromUTF32(
-                UTF8Encoder::new(UTF32Decoder::new(reader, Endianness::Big)),
-            ),
-            [0xFF, 0xFE, 0, 0] | [_, 0, 0, 0] if len == 4 => TranscoderKind::FromUTF32(
-                UTF8Encoder::new(UTF32Decoder::new(reader, Endianness::Little)),
-            ),
-            [0xFE, 0xFF, ..] | [0, _, ..] if len >= 2 => TranscoderKind::FromUTF16(
-                UTF8Encoder::new(UTF16Decoder::new(reader, Endianness::Big)),
-            ),
-            [0xFF, 0xFE, ..] | [_, 0, ..] if len >= 2 => TranscoderKind::FromUTF16(
-                UTF8Encoder::new(UTF16Decoder::new(reader, Endianness::Little)),
-            ),
-            _ => TranscoderKind::Passthrough(reader),
+        Self(match from {
+            UTF8 => Passthrough(reader),
+            UTF16BE => FromUTF16(UTF8Encoder::new(UTF16Decoder::new(reader, Big))),
+            UTF16LE => FromUTF16(UTF8Encoder::new(UTF16Decoder::new(reader, Little))),
+            UTF32BE => FromUTF32(UTF8Encoder::new(UTF32Decoder::new(reader, Big))),
+            UTF32LE => FromUTF32(UTF8Encoder::new(UTF32Decoder::new(reader, Little))),
         })
+    }
+
+    /// Creates a transcoder by detecting the encoding from the first bytes of
+    /// the reader.
+    pub fn from_reader(mut reader: R) -> Self {
+        let encoding = Encoding::detect(reader.fill_buf().unwrap_or(&[]));
+        Self::new(reader, encoding)
     }
 }
 
