@@ -3,7 +3,7 @@
 use std::cmp::min;
 use std::error::Error;
 use std::fmt::{Debug, Display, LowerHex};
-use std::io::{self, BufRead, Chain, Cursor, Read};
+use std::io::{self, BufRead, Cursor, Read};
 
 /// The required size of a buffer large enough to encode any `char` as UTF-8,
 /// per [`char::encode_utf8`].
@@ -98,9 +98,9 @@ where
         })
     }
 
-    /// Creates a transcoder by detecting the encoding from the first bytes of
-    /// the reader.
-    pub fn from_reader(mut reader: R) -> Transcoder<Chain<Cursor<Vec<u8>>, R>> {
+    /// Creates a transcoder by detecting the source encoding from the first
+    /// bytes of the reader.
+    pub fn from_reader(mut reader: R) -> impl Read {
         let mut prefix = Cursor::new(vec![]);
         let encoding = match (&mut reader)
             .take(Encoding::DETECT_LEN as u64)
