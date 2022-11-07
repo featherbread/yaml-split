@@ -7,16 +7,18 @@ use std::io::{self, BufRead, Read};
 /// per [`char::encode_utf8`].
 const MAX_UTF8_ENCODED_LEN: usize = 4;
 
-/// Produces a YAML 1.2 stream as UTF-8 regardless of its source encoding.
+/// Reads a YAML 1.2 stream as UTF-8 regardless of its source encoding.
 ///
-/// A `Transcoder` detects the encoding of YAML 1.2 streams based on the rules
-/// in section 5.2 of the specification. If it determines that the stream is
-/// UTF-16 or UTF-32, it transparently re-encodes it to UTF-8 and strips any
-/// initial byte order mark. Otherwise, it assumes that the input is UTF-8 and
-/// reads it directly.
+/// A `Transcoder` detects the encoding of YAML 1.2 streams using the rules in
+/// [section 5.2 of the YAML 1.2.2 specification][spec]. If it determines that
+/// the stream is UTF-16 or UTF-32, it transparently re-encodes it to UTF-8 and
+/// strips any initial byte order mark. Otherwise, it assumes that the input is
+/// UTF-8 and reads it directly.
 ///
 /// `Transcoder` is designed for YAML 1.2 streams. Detection and re-encoding
 /// behavior for arbitrary text inputs is not well-defined.
+///
+/// [spec]: https://yaml.org/spec/1.2.2/#52-character-encodings
 pub struct Transcoder<R>(TranscoderKind<R>)
 where
     R: BufRead;
@@ -79,29 +81,7 @@ where
     }
 }
 
-/// Represents the endianness of UTF-16 or UTF-32 text.
-enum Endianness {
-    Big,
-    Little,
-}
-
-impl Endianness {
-    fn decode_u16(&self, buf: [u8; 2]) -> u16 {
-        match self {
-            Endianness::Big => u16::from_be_bytes(buf),
-            Endianness::Little => u16::from_le_bytes(buf),
-        }
-    }
-
-    fn decode_u32(&self, buf: [u8; 4]) -> u32 {
-        match self {
-            Endianness::Big => u32::from_be_bytes(buf),
-            Endianness::Little => u32::from_le_bytes(buf),
-        }
-    }
-}
-
-/// A streaming UTF-8 encoder designed to pair with [`UTF16Decoder`] or
+/// A streaming UTF-8 encoder that pairs with [`UTF16Decoder`] or
 /// [`UTF32Decoder`].
 ///
 /// If the source document starts with a BOM, the encoder will skip it and
@@ -390,6 +370,29 @@ where
     }
 }
 
+/// Represents the endianness of UTF-16 or UTF-32 text.
+enum Endianness {
+    Big,
+    Little,
+}
+
+impl Endianness {
+    fn decode_u16(&self, buf: [u8; 2]) -> u16 {
+        match self {
+            Endianness::Big => u16::from_be_bytes(buf),
+            Endianness::Little => u16::from_le_bytes(buf),
+        }
+    }
+
+    fn decode_u32(&self, buf: [u8; 4]) -> u32 {
+        match self {
+            Endianness::Big => u32::from_be_bytes(buf),
+            Endianness::Little => u32::from_le_bytes(buf),
+        }
+    }
+}
+
+/// An error in a UTF-16 or UTF-32 stream.
 #[derive(Debug)]
 struct EncodingError<T>
 where
