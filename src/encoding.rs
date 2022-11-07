@@ -92,7 +92,9 @@ where
     /// Creates a transcoder by detecting the source encoding from the first
     /// bytes of the reader.
     ///
-    /// See [`Encoding::detect`] for details of the detection process.
+    /// See [`Encoding::detect`] for details of the detection process. Note that
+    /// `from_reader` provides as many prefix bytes to the detector as it needs
+    /// for accurate detection.
     pub fn from_reader(mut reader: R) -> io::Result<impl Read> {
         let mut prefix = ArrayBuffer::<{ Encoding::DETECT_LEN }>::new();
         io::copy(
