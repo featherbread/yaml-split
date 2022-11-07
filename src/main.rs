@@ -11,6 +11,12 @@ use chunker::Chunker;
 use encoding::Transcoder;
 
 fn main() {
+    // SAFETY: libc is assumed to be correct.
+    #[cfg(unix)]
+    unsafe {
+        libc::signal(libc::SIGPIPE, libc::SIG_DFL);
+    }
+
     let cli = Cli::parse();
     let input: Box<dyn BufRead> = match cli.inputfile {
         None => Box::new(io::stdin().lock()),
