@@ -53,8 +53,8 @@ where
     /// spec, and requires a UTF-8 stream without BOMs. You may need to
     /// re-encode your input stream and strip BOMs in a separate step.
     pub fn new(reader: R) -> Self {
-        // SAFETY: libyaml code is assumed to be correct. To avoid leaking
-        // memory, we don't unbox the pointer until after the panic attempt.
+        // SAFETY: libyaml is assumed to be correct. To avoid leaking memory, we
+        // don't unbox the pointer until after the panic attempt.
         let parser = unsafe {
             let mut parser = Box::new(MaybeUninit::<yaml_parser_t>::uninit());
             if yaml_parser_initialize(parser.as_mut_ptr()).fail {
@@ -67,7 +67,10 @@ where
             reader: ChunkReader::new(reader),
             error: None,
         }));
-        // SAFETY: libyaml code is assumed to be correct.
+
+        // SAFETY: libyaml is assumed to be correct. The data pointer we provide
+        // to `yaml_parser_set_input` is a valid pointer to an initialized
+        // `ReadState<R>`.
         unsafe {
             yaml_parser_set_encoding(parser, YAML_UTF8_ENCODING);
             yaml_parser_set_input(parser, Self::read_handler, read_state as *mut c_void);
@@ -77,6 +80,12 @@ where
     }
 
     /// Implements [`yaml_read_handler_t`].
+    ///
+    /// # Safety
+    ///
+    /// The `data` pointer provided to [`yaml_parser_set_input`] alongside this
+    /// function must be a valid pointer to an initialized `ReadState<R>`.
+    /// libyaml is assumed to initialize all other pointers correctly.
     unsafe fn read_handler(
         read_state: *mut c_void,
         buffer: *mut u8,
@@ -86,16 +95,14 @@ where
         const READ_SUCCESS: i32 = 1;
         const READ_FAILURE: i32 = 0;
 
-        // SAFETY: libyaml code is assumed to be correct, in that it passes us
-        // the data pointer we originally provided.
         let read_state = read_state.cast::<ReadState<R>>();
 
-        // TODO: libyaml code is assumed to pass us a valid buffer of the
-        // provided size. However, it does seem to malloc() this buffer with no
-        // further initialization of its own. We arguably aren't violating any
-        // type-level invariants here, since a u8 can represent any byte, but at
-        // best this is playing very fast and loose with the definition of
-        // "properly initialized."
+        // TODO: This needs more scrutiny. We can reasonably expect libyaml to
+        // pass us a properly allocated buffer of the provided size, however it
+        // seems that it might just malloc() this buffer with no further
+        // initialization of its contents. u8 shouldn't have any big type-level
+        // invariants (unlike e.g. bool), but I don't think that's enough to
+        // eliminate the possibility of instant UB on this conversion.
         let buf = std::slice::from_raw_parts_mut(buffer, size as usize);
 
         match (*read_state).reader.read(buf) {
@@ -166,8 +173,8 @@ where
     R: Read,
 {
     fn drop(&mut self) {
-        // SAFETY: libyaml code is assumed to be correct. Both of the raw
-        // pointers were originally obtained from Boxes.
+        // SAFETY: libyaml is assumed to be correct. Both of the raw pointers
+        // were originally obtained from Boxes.
         unsafe {
             yaml_parser_delete(self.parser);
             drop(Box::from_raw(self.parser));
@@ -180,6 +187,11 @@ where
 struct Event(*mut yaml_event_t);
 
 impl Event {
+    /// Runs the parser and returns its next event.
+    ///
+    /// # Safety
+    ///
+    /// `parser` must be a valid pointer to an initialized [`yaml_parser_t`].
     unsafe fn from_parser(parser: *mut yaml_parser_t) -> Result<Event, ()> {
         let mut event = Box::new(MaybeUninit::<yaml_event_t>::uninit());
         if yaml_parser_parse(parser, event.as_mut_ptr()).fail {
@@ -201,6 +213,8 @@ impl Deref for Event {
 
 impl Drop for Event {
     fn drop(&mut self) {
+        // SAFETY: libyaml is assumed to be correct. The raw pointer was
+        // originally obtained from a Box.
         unsafe {
             yaml_event_delete(self.0);
             drop(Box::from_raw(self.0));
@@ -216,6 +230,11 @@ struct ParserError {
 }
 
 impl ParserError {
+    /// Creates an error from the current state of a parser.
+    ///
+    /// # Safety
+    ///
+    /// `parser` must be a valid pointer to an initialized [`yaml_parser_t`].
     unsafe fn from_parser(parser: *mut yaml_parser_t) -> Self {
         Self {
             problem: NonNull::new((*parser).problem as *mut i8).map(|problem| {
@@ -256,6 +275,14 @@ struct LocatedError {
 }
 
 impl LocatedError {
+    /// Creates an error from portions of the error state in a parser.
+    ///
+    /// If `override_offset` is not `None`, it will replace the byte index
+    /// reported by `mark` when the error is displayed.
+    ///
+    /// # Safety
+    ///
+    /// `description` must be a valid pointer to a valid C string.
     unsafe fn from_parts(
         description: *const i8,
         mark: yaml_mark_t,
