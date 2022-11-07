@@ -22,7 +22,7 @@ fn main() {
         None => Box::new(io::stdin().lock()),
         Some(filename) => Box::new(BufReader::new(File::open(filename).unwrap())),
     };
-    for chunk in Chunker::new(Transcoder::from_reader(input)) {
+    for chunk in Chunker::new(Transcoder::from_reader(input).unwrap()) {
         match chunk {
             Err(err) => panic!("chunker error: {}", err),
             Ok(chunk) => println!(

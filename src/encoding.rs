@@ -3,7 +3,7 @@
 use std::cmp::min;
 use std::error::Error;
 use std::fmt::{Debug, Display, LowerHex};
-use std::io::{self, BufRead, Cursor, Read};
+use std::io::{self, BufRead, Read, Write};
 
 /// The required size of a buffer large enough to encode any `char` as UTF-8,
 /// per [`char::encode_utf8`].
@@ -100,16 +100,14 @@ where
 
     /// Creates a transcoder by detecting the source encoding from the first
     /// bytes of the reader.
-    pub fn from_reader(mut reader: R) -> impl Read {
-        let mut prefix = Cursor::new(vec![]);
-        let encoding = match (&mut reader)
-            .take(Encoding::DETECT_LEN as u64)
-            .read_to_end(prefix.get_mut())
-        {
-            Ok(_) => Encoding::detect(prefix.get_ref()),
-            Err(_) => Encoding::UTF8,
-        };
-        Transcoder::new(prefix.chain(reader), encoding)
+    pub fn from_reader(mut reader: R) -> io::Result<impl Read> {
+        let mut prefix = ArrayBuffer::<{ Encoding::DETECT_LEN }>::new();
+        io::copy(
+            &mut (&mut reader).take(Encoding::DETECT_LEN as u64),
+            &mut prefix,
+        )?;
+        let encoding = Encoding::detect(prefix.unread());
+        Ok(Transcoder::new(prefix.chain(reader), encoding))
     }
 }
 
@@ -136,7 +134,7 @@ where
     S: Iterator<Item = io::Result<char>>,
 {
     source: S,
-    remainder: Buffer<MAX_UTF8_ENCODED_LEN>,
+    remainder: ArrayBuffer<MAX_UTF8_ENCODED_LEN>,
     started: bool,
 }
 
@@ -147,7 +145,7 @@ where
     fn new(source: S) -> Self {
         Self {
             source,
-            remainder: Buffer::new(),
+            remainder: ArrayBuffer::new(),
             started: false,
         }
     }
@@ -223,14 +221,14 @@ where
     }
 }
 
-/// A reusable array-backed readable buffer.
-struct Buffer<const SIZE: usize> {
+/// A reusable array-backed buffer supporting reads and writes.
+struct ArrayBuffer<const SIZE: usize> {
     buf: [u8; SIZE],
     pos: usize,
     len: usize,
 }
 
-impl<const SIZE: usize> Buffer<SIZE> {
+impl<const SIZE: usize> ArrayBuffer<SIZE> {
     /// Returns a new empty buffer.
     fn new() -> Self {
         Self {
@@ -246,6 +244,11 @@ impl<const SIZE: usize> Buffer<SIZE> {
         self.pos == self.len
     }
 
+    /// Returns the unread portion of the buffer as a slice.
+    fn unread(&self) -> &[u8] {
+        &self.buf[self.pos..self.len]
+    }
+
     /// Sets the contents of the buffer to be returned by future reads,
     /// replacing any existing contents.
     ///
@@ -255,7 +258,7 @@ impl<const SIZE: usize> Buffer<SIZE> {
     fn set(&mut self, buf: &[u8]) {
         debug_assert!(
             buf.len() <= SIZE,
-            "called Buffer::set with a slice of size {} on a Buffer of size {}",
+            "called ArrayBuffer::set with a slice of size {} on an ArrayBuffer of size {}",
             buf.len(),
             SIZE,
         );
@@ -265,12 +268,41 @@ impl<const SIZE: usize> Buffer<SIZE> {
     }
 }
 
-impl<const SIZE: usize> Read for Buffer<SIZE> {
+impl<const SIZE: usize> Read for ArrayBuffer<SIZE> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         let len = min(self.len - self.pos, buf.len());
         buf[..len].copy_from_slice(&self.buf[self.pos..self.pos + len]);
         self.pos += len;
         Ok(len)
+    }
+}
+
+impl<const SIZE: usize> BufRead for ArrayBuffer<SIZE> {
+    fn fill_buf(&mut self) -> io::Result<&[u8]> {
+        Ok(&self.buf[self.pos..self.len])
+    }
+
+    fn consume(&mut self, amt: usize) {
+        debug_assert!(
+            amt <= self.fill_buf().unwrap().len(),
+            "tried to consume {} bytes from an ArrayBuffer that has {} bytes available",
+            amt,
+            self.fill_buf().unwrap().len(),
+        );
+        self.pos += amt;
+    }
+}
+
+impl<const SIZE: usize> Write for ArrayBuffer<SIZE> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        let written = min(SIZE - self.len, buf.len());
+        self.buf[self.len..self.len + written].copy_from_slice(&buf[..written]);
+        self.len += written;
+        Ok(written)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
     }
 }
 
