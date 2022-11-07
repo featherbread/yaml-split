@@ -476,11 +476,6 @@ impl<const SIZE: usize> ArrayBuffer<SIZE> {
         self.unread().is_empty()
     }
 
-    /// Returns the unwritten portion of the buffer as a slice.
-    fn unwritten_mut(&mut self) -> &mut [u8] {
-        &mut self.buf[self.len..SIZE]
-    }
-
     /// Empties and reinitializes the buffer, optionally with an initial slice
     /// of unread bytes.
     ///
@@ -488,22 +483,24 @@ impl<const SIZE: usize> ArrayBuffer<SIZE> {
     ///
     /// Panics if `buf` is larger than the static size of the buffer.
     fn set(&mut self, buf: &[u8]) {
+        let n = buf.len();
         debug_assert!(
-            buf.len() <= SIZE,
+            n <= SIZE,
             "called ArrayBuffer::set with a slice of size {} on an ArrayBuffer of size {}",
-            buf.len(),
+            n,
             SIZE,
         );
-        self.buf[..buf.len()].copy_from_slice(buf);
+        self.buf[..n].copy_from_slice(buf);
         self.pos = 0;
-        self.len = buf.len();
+        self.len = n;
     }
 }
 
 impl<const SIZE: usize> Read for ArrayBuffer<SIZE> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        let n = min(self.unread().len(), buf.len());
-        buf[..n].copy_from_slice(&self.unread()[..n]);
+        let unread = self.unread();
+        let n = min(unread.len(), buf.len());
+        buf[..n].copy_from_slice(&unread[..n]);
         self.pos += n;
         Ok(n)
     }
@@ -521,8 +518,9 @@ impl<const SIZE: usize> BufRead for ArrayBuffer<SIZE> {
 
 impl<const SIZE: usize> Write for ArrayBuffer<SIZE> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        let n = min(self.unwritten_mut().len(), buf.len());
-        self.unwritten_mut()[..n].copy_from_slice(&buf[..n]);
+        let unwritten = &mut self.buf[self.len..SIZE];
+        let n = min(unwritten.len(), buf.len());
+        unwritten[..n].copy_from_slice(&buf[..n]);
         self.len += n;
         Ok(n)
     }
