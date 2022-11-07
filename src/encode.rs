@@ -3,8 +3,20 @@ use std::error::Error;
 use std::fmt::{Debug, Display, LowerHex};
 use std::io::{self, BufRead, Read};
 
+/// The required size of a buffer large enough to encode any `char` as UTF-8,
+/// per [`char::encode_utf8`].
 const MAX_UTF8_ENCODED_LEN: usize = 4;
 
+/// Produces a YAML 1.2 stream as UTF-8 regardless of its source encoding.
+///
+/// A `Transcoder` detects the encoding of YAML 1.2 streams based on the rules
+/// in section 5.2 of the specification. If it determines that the stream is
+/// UTF-16 or UTF-32, it transparently re-encodes it to UTF-8 and strips any
+/// initial byte order mark. Otherwise, it assumes that the input is UTF-8 and
+/// reads it directly.
+///
+/// `Transcoder` is designed for YAML 1.2 streams. Detection and re-encoding
+/// behavior for arbitrary text inputs is not well-defined.
 pub struct Transcoder<R>(TranscoderKind<R>)
 where
     R: BufRead;
@@ -22,7 +34,14 @@ impl<R> Transcoder<R>
 where
     R: BufRead,
 {
+    /// Creates a transcoder for the provided reader.
     pub fn new(mut reader: R) -> Self {
+        // Make a best effort to read the prefix. If there is an I/O error,
+        // we'll just assume that the input is UTF-8 and deal with the fallout
+        // later.
+        //
+        // TODO: There's no guarantee that `fill_buf` will give us 4 bytes even
+        // if there are 4 bytes available from the source.
         let mut prefix = [0u8; 4];
         let buf = reader.fill_buf().unwrap_or(&[]);
         let len = min(buf.len(), prefix.len());
@@ -61,7 +80,7 @@ where
 }
 
 /// Represents the endianness of UTF-16 or UTF-32 text.
-pub enum Endianness {
+enum Endianness {
     Big,
     Little,
 }
@@ -230,7 +249,7 @@ impl<const SIZE: usize> Read for Buffer<SIZE> {
 }
 
 /// A streaming UTF-16 decoder.
-pub struct UTF16Decoder<R>
+struct UTF16Decoder<R>
 where
     R: BufRead,
 {
@@ -244,7 +263,7 @@ impl<R> UTF16Decoder<R>
 where
     R: BufRead,
 {
-    pub fn new(source: R, endianness: Endianness) -> Self {
+    fn new(source: R, endianness: Endianness) -> Self {
         Self {
             source,
             pos: 0,
@@ -321,7 +340,7 @@ where
 }
 
 /// A streaming UTF-32 decoder.
-pub struct UTF32Decoder<R>
+struct UTF32Decoder<R>
 where
     R: BufRead,
 {
@@ -334,7 +353,7 @@ impl<R> UTF32Decoder<R>
 where
     R: BufRead,
 {
-    pub fn new(source: R, endianness: Endianness) -> Self {
+    fn new(source: R, endianness: Endianness) -> Self {
         Self {
             source,
             pos: 0,
