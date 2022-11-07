@@ -4,11 +4,11 @@ use std::path::PathBuf;
 
 use clap::Parser;
 
-mod chunk;
-mod encode;
+mod chunker;
+mod encoding;
 
-use chunk::Chunker;
-use encode::Transcoder;
+use chunker::Chunker;
+use encoding::Transcoder;
 
 fn main() {
     let cli = Cli::parse();
