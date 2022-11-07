@@ -106,7 +106,7 @@ impl Endianness {
 ///
 /// If the source document starts with a BOM, the encoder will skip it and
 /// reading will begin with the actual text content.
-pub struct UTF8Encoder<S>
+struct UTF8Encoder<S>
 where
     S: Iterator<Item = io::Result<char>>,
 {
@@ -119,7 +119,7 @@ impl<S> UTF8Encoder<S>
 where
     S: Iterator<Item = io::Result<char>>,
 {
-    pub fn new(source: S) -> Self {
+    fn new(source: S) -> Self {
         Self {
             source,
             remainder: Buffer::new(),
