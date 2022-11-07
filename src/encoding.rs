@@ -1,3 +1,5 @@
+//! Streaming text encoding support for YAML 1.2 streams.
+
 use std::cmp::min;
 use std::error::Error;
 use std::fmt::{Debug, Display, LowerHex};
