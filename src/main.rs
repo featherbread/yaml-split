@@ -12,7 +12,7 @@ use encoding::Transcoder;
 
 fn main() {
     // SAFETY: libc is assumed to be correct.
-    #[cfg(unix)]
+    #[cfg(all(unix, not(miri)))]
     unsafe {
         libc::signal(libc::SIGPIPE, libc::SIG_DFL);
     }
