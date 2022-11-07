@@ -454,23 +454,27 @@ impl<const SIZE: usize> ArrayBuffer<SIZE> {
         }
     }
 
-    /// Returns whether the buffer is empty; that is, whether it contains no
-    /// unread content.
-    fn is_empty(&self) -> bool {
-        self.pos == self.len
-    }
-
     /// Returns the unread portion of the buffer as a slice.
     fn unread(&self) -> &[u8] {
         &self.buf[self.pos..self.len]
     }
 
-    /// Sets the contents of the buffer to be returned by future reads,
-    /// replacing any existing contents.
+    /// Returns the unwritten portion of the buffer as a slice.
+    fn unwritten_mut(&mut self) -> &mut [u8] {
+        &mut self.buf[self.len..SIZE]
+    }
+
+    /// Returns whether the buffer is empty; that is, whether it contains no
+    /// unread content.
+    fn is_empty(&self) -> bool {
+        self.unread().is_empty()
+    }
+
+    /// Sets the contents of the buffer, replacing any existing contents.
     ///
     /// # Panics
     ///
-    /// Panics if `buf` is longer than the static size of the buffer.
+    /// Panics if `buf` is larger than the static size of the buffer.
     fn set(&mut self, buf: &[u8]) {
         debug_assert!(
             buf.len() <= SIZE,
@@ -486,35 +490,29 @@ impl<const SIZE: usize> ArrayBuffer<SIZE> {
 
 impl<const SIZE: usize> Read for ArrayBuffer<SIZE> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        let len = min(self.len - self.pos, buf.len());
-        buf[..len].copy_from_slice(&self.buf[self.pos..self.pos + len]);
-        self.pos += len;
-        Ok(len)
+        let n = min(self.unread().len(), buf.len());
+        buf[..n].copy_from_slice(&self.unread()[..n]);
+        self.pos += n;
+        Ok(n)
     }
 }
 
 impl<const SIZE: usize> BufRead for ArrayBuffer<SIZE> {
     fn fill_buf(&mut self) -> io::Result<&[u8]> {
-        Ok(&self.buf[self.pos..self.len])
+        Ok(self.unread())
     }
 
     fn consume(&mut self, amt: usize) {
-        debug_assert!(
-            amt <= self.fill_buf().unwrap().len(),
-            "tried to consume {} bytes from an ArrayBuffer that has {} bytes available",
-            amt,
-            self.fill_buf().unwrap().len(),
-        );
         self.pos += amt;
     }
 }
 
 impl<const SIZE: usize> Write for ArrayBuffer<SIZE> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        let written = min(SIZE - self.len, buf.len());
-        self.buf[self.len..self.len + written].copy_from_slice(&buf[..written]);
-        self.len += written;
-        Ok(written)
+        let n = min(self.unwritten_mut().len(), buf.len());
+        self.unwritten_mut()[..n].copy_from_slice(&buf[..n]);
+        self.len += n;
+        Ok(n)
     }
 
     fn flush(&mut self) -> io::Result<()> {
