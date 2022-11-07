@@ -3,7 +3,7 @@
 use std::cmp::min;
 use std::error::Error;
 use std::fmt::{Debug, Display, LowerHex};
-use std::io::{self, BufRead, Read};
+use std::io::{self, BufRead, Chain, Cursor, Read};
 
 /// The required size of a buffer large enough to encode any `char` as UTF-8,
 /// per [`char::encode_utf8`].
@@ -19,6 +19,9 @@ pub enum Encoding {
 }
 
 impl Encoding {
+    /// The desired length of the prefix for encoding detection.
+    const DETECT_LEN: usize = 4;
+
     /// Detects the text encoding of a YAML 1.2 stream based on its leading
     /// bytes.
     ///
@@ -97,9 +100,16 @@ where
 
     /// Creates a transcoder by detecting the encoding from the first bytes of
     /// the reader.
-    pub fn from_reader(mut reader: R) -> Self {
-        let encoding = Encoding::detect(reader.fill_buf().unwrap_or(&[]));
-        Self::new(reader, encoding)
+    pub fn from_reader(mut reader: R) -> Transcoder<Chain<Cursor<Vec<u8>>, R>> {
+        let mut prefix = Cursor::new(vec![]);
+        let encoding = match (&mut reader)
+            .take(Encoding::DETECT_LEN as u64)
+            .read_to_end(prefix.get_mut())
+        {
+            Ok(_) => Encoding::detect(prefix.get_ref()),
+            Err(_) => Encoding::UTF8,
+        };
+        Transcoder::new(prefix.chain(reader), encoding)
     }
 }
 
