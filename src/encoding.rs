@@ -52,16 +52,11 @@ impl Encoding {
 
 /// Reads a YAML 1.2 stream as UTF-8 regardless of its source encoding.
 ///
-/// A `Transcoder` detects the encoding of YAML 1.2 streams using the rules in
-/// [section 5.2 of the YAML 1.2.2 specification][spec]. If it determines that
-/// the stream is UTF-16 or UTF-32, it transparently re-encodes it to UTF-8 and
-/// strips any initial byte order mark. Otherwise, it assumes that the input is
-/// UTF-8 and reads it directly.
-///
-/// `Transcoder` is designed for YAML 1.2 streams. Detection and re-encoding
-/// behavior for arbitrary text inputs is not well-defined.
-///
-/// [spec]: https://yaml.org/spec/1.2.2/#52-character-encodings
+/// Given a UTF-16 or UTF-32 YAML stream, a `Transcoder` can transparently
+/// re-encode it to UTF-8 and strip any initial byte order mark as it is read
+/// from, improving compatibility with parsers that do not accept the full range
+/// of supported YAML encodings. Otherwise, a `Transcoder` can pass through a
+/// UTF-8 stream with little overhead.
 pub struct Transcoder<R>(TranscoderKind<R>)
 where
     R: BufRead;
@@ -96,6 +91,8 @@ where
 
     /// Creates a transcoder by detecting the source encoding from the first
     /// bytes of the reader.
+    ///
+    /// See [`Encoding::detect`] for details of the detection process.
     pub fn from_reader(mut reader: R) -> io::Result<impl Read> {
         let mut prefix = ArrayBuffer::<{ Encoding::DETECT_LEN }>::new();
         io::copy(
