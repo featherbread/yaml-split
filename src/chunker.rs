@@ -47,13 +47,11 @@ where
 {
     /// Creates a new chunker for the YAML stream read from the reader.
     ///
-    /// While YAML 1.2 allows a number of different text encodings for YAML
-    /// streams, the chunker requires the provided stream to be UTF-8.
-    /// Furthermore, the chunker's YAML parser does not properly handle the
-    /// presence of Unicode byte order marks as defined by section 5.2 of the
-    /// specification. Before chunking a YAML stream, you may need to detect its
-    /// encoding following the steps in 5.2 of the specification, re-encode it
-    /// to UTF-8, and strip any initial BOM in a separate step.
+    /// YAML 1.2 allows several different text encodings for YAML streams, as
+    /// well as the presence of byte order marks at the start of the stream or
+    /// individual documents. However, `Chunker` does not fully support the
+    /// spec, and requires a UTF-8 stream without BOMs. You may need to
+    /// re-encode your input stream and strip BOMs in a separate step.
     pub fn new(reader: R) -> Self {
         // SAFETY: libyaml code is assumed to be correct. To avoid leaking
         // memory, we don't unbox the pointer until after the panic attempt.
@@ -72,20 +70,21 @@ where
         // SAFETY: libyaml code is assumed to be correct.
         unsafe {
             yaml_parser_set_encoding(parser, YAML_UTF8_ENCODING);
-            yaml_parser_set_input(parser, Self::read_callback, read_state as *mut c_void);
+            yaml_parser_set_input(parser, Self::read_handler, read_state as *mut c_void);
         }
 
         Self { parser, read_state }
     }
 
-    unsafe fn read_callback(
+    /// Implements [`yaml_read_handler_t`].
+    unsafe fn read_handler(
         read_state: *mut c_void,
         buffer: *mut u8,
         size: u64,
         size_read: *mut u64,
     ) -> i32 {
-        const READ_FAILURE: i32 = 0;
         const READ_SUCCESS: i32 = 1;
+        const READ_FAILURE: i32 = 0;
 
         // SAFETY: libyaml code is assumed to be correct, in that it passes us
         // the data pointer we originally provided.
@@ -101,6 +100,8 @@ where
 
         match (*read_state).reader.read(buf) {
             Ok(len) => {
+                // Note that libyaml's EOF condition is the same as Rust's: set
+                // `size_read` to 0 and return success.
                 *size_read = len as u64;
                 (*read_state).error = None;
                 READ_SUCCESS
