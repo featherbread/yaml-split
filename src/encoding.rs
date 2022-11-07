@@ -459,15 +459,15 @@ impl<const SIZE: usize> ArrayBuffer<SIZE> {
         &self.buf[self.pos..self.len]
     }
 
-    /// Returns the unwritten portion of the buffer as a slice.
-    fn unwritten_mut(&mut self) -> &mut [u8] {
-        &mut self.buf[self.len..SIZE]
-    }
-
     /// Returns whether the buffer is empty; that is, whether it contains no
     /// unread content.
     fn is_empty(&self) -> bool {
         self.unread().is_empty()
+    }
+
+    /// Returns the unwritten portion of the buffer as a slice.
+    fn unwritten_mut(&mut self) -> &mut [u8] {
+        &mut self.buf[self.len..SIZE]
     }
 
     /// Sets the contents of the buffer, replacing any existing contents.
