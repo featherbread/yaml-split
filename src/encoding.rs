@@ -5,10 +5,6 @@ use std::error::Error;
 use std::fmt::{Debug, Display, LowerHex};
 use std::io::{self, BufRead, Read, Write};
 
-/// The required size of a buffer large enough to encode any `char` as UTF-8,
-/// per [`char::encode_utf8`].
-const MAX_UTF8_ENCODED_LEN: usize = 4;
-
 /// The possible text encodings of a valid YAML 1.2 stream.
 pub enum Encoding {
     UTF8,
@@ -123,6 +119,10 @@ where
         }
     }
 }
+
+/// The required size of a buffer large enough to encode any `char` as UTF-8,
+/// per [`char::encode_utf8`].
+const MAX_UTF8_ENCODED_LEN: usize = 4;
 
 /// A streaming UTF-8 encoder that pairs with [`UTF16Decoder`] or
 /// [`UTF32Decoder`].
