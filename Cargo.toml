@@ -10,3 +10,7 @@ unsafe-libyaml = "0.2"
 version = "3"
 default-features = false
 features = ["std", "derive", "cargo"]
+
+[profile.release]
+lto = true
+codegen-units = 1
