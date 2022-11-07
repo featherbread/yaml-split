@@ -437,7 +437,19 @@ where
     }
 }
 
-/// A reusable array-backed buffer supporting reads and writes.
+/// A reusable fixed-size buffer with one-way read and write support.
+///
+/// The array backing an `ArrayBuffer` is logically divided into three
+/// contiguous sections:
+///
+/// - The *read* section, whose contents have been consumed by previous reads.
+/// - The *unread* section, which future reads will produce from.
+/// - The *unwritten* section, which future writes will populate.
+///
+/// Writes append to the unread section of the array, shrinking the unwritten
+/// section. The space in the read section is never reclaimed automatically for
+/// future writes. Instead, an `ArrayBuffer` can be emptied and reinitialized
+/// using `set`, optionally with an initial slice of unread bytes.
 struct ArrayBuffer<const SIZE: usize> {
     buf: [u8; SIZE],
     pos: usize,
@@ -470,7 +482,8 @@ impl<const SIZE: usize> ArrayBuffer<SIZE> {
         &mut self.buf[self.len..SIZE]
     }
 
-    /// Sets the contents of the buffer, replacing any existing contents.
+    /// Empties and reinitializes the buffer, optionally with an initial slice
+    /// of unread bytes.
     ///
     /// # Panics
     ///
