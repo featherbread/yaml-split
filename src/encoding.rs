@@ -7,11 +7,11 @@ use std::io::{self, BufRead, Read, Write};
 
 /// The possible text encodings of a valid YAML 1.2 stream.
 pub enum Encoding {
-    UTF8,
-    UTF16BE,
-    UTF16LE,
-    UTF32BE,
-    UTF32LE,
+    Utf8,
+    Utf16Big,
+    Utf32Big,
+    Utf16Little,
+    Utf32Little,
 }
 
 impl Encoding {
@@ -34,19 +34,19 @@ impl Encoding {
     pub fn detect(prefix: &[u8]) -> Encoding {
         if let Some(Ok(prefix)) = prefix.get(0..4).map(TryInto::<[u8; 4]>::try_into) {
             match prefix {
-                [0, 0, 0xFE, 0xFF] | [0, 0, 0, _] => return Encoding::UTF32BE,
-                [0xFF, 0xFE, 0, 0] | [_, 0, 0, 0] => return Encoding::UTF32LE,
+                [0, 0, 0xFE, 0xFF] | [0, 0, 0, _] => return Encoding::Utf32Big,
+                [0xFF, 0xFE, 0, 0] | [_, 0, 0, 0] => return Encoding::Utf32Little,
                 _ => {}
             };
         }
         if let Some(Ok(prefix)) = prefix.get(0..2).map(TryInto::<[u8; 2]>::try_into) {
             match prefix {
-                [0xFE, 0xFF] | [0, _] => return Encoding::UTF16BE,
-                [0xFF, 0xFE] | [_, 0] => return Encoding::UTF16LE,
+                [0xFE, 0xFF] | [0, _] => return Encoding::Utf16Big,
+                [0xFF, 0xFE] | [_, 0] => return Encoding::Utf16Little,
                 _ => {}
             };
         }
-        Encoding::UTF8
+        Encoding::Utf8
     }
 }
 
@@ -66,8 +66,8 @@ where
     R: BufRead,
 {
     Passthrough(R),
-    FromUTF16(UTF8Encoder<UTF16Decoder<R>>),
-    FromUTF32(UTF8Encoder<UTF32Decoder<R>>),
+    From16(Utf8Encoder<Utf16Decoder<R>>),
+    From32(Utf8Encoder<Utf32Decoder<R>>),
 }
 
 impl<R> Transcoder<R>
@@ -81,11 +81,11 @@ where
         use TranscoderKind::*;
 
         Self(match from {
-            UTF8 => Passthrough(reader),
-            UTF16BE => FromUTF16(UTF8Encoder::new(UTF16Decoder::new(reader, Big))),
-            UTF16LE => FromUTF16(UTF8Encoder::new(UTF16Decoder::new(reader, Little))),
-            UTF32BE => FromUTF32(UTF8Encoder::new(UTF32Decoder::new(reader, Big))),
-            UTF32LE => FromUTF32(UTF8Encoder::new(UTF32Decoder::new(reader, Little))),
+            Utf8 => Passthrough(reader),
+            Utf16Big => From16(Utf8Encoder::new(Utf16Decoder::new(reader, Big))),
+            Utf32Big => From32(Utf8Encoder::new(Utf32Decoder::new(reader, Big))),
+            Utf16Little => From16(Utf8Encoder::new(Utf16Decoder::new(reader, Little))),
+            Utf32Little => From32(Utf8Encoder::new(Utf32Decoder::new(reader, Little))),
         })
     }
 
@@ -111,8 +111,8 @@ where
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         match &mut self.0 {
             TranscoderKind::Passthrough(r) => r.read(buf),
-            TranscoderKind::FromUTF16(r) => r.read(buf),
-            TranscoderKind::FromUTF32(r) => r.read(buf),
+            TranscoderKind::From16(r) => r.read(buf),
+            TranscoderKind::From32(r) => r.read(buf),
         }
     }
 }
@@ -126,7 +126,7 @@ const MAX_UTF8_ENCODED_LEN: usize = 4;
 ///
 /// If the source document starts with a BOM, the encoder will skip it and
 /// reading will begin with the actual text content.
-struct UTF8Encoder<S>
+struct Utf8Encoder<S>
 where
     S: Iterator<Item = io::Result<char>>,
 {
@@ -135,7 +135,7 @@ where
     started: bool,
 }
 
-impl<S> UTF8Encoder<S>
+impl<S> Utf8Encoder<S>
 where
     S: Iterator<Item = io::Result<char>>,
 {
@@ -161,7 +161,7 @@ where
     }
 }
 
-impl<S> Read for UTF8Encoder<S>
+impl<S> Read for Utf8Encoder<S>
 where
     S: Iterator<Item = io::Result<char>>,
 {
@@ -219,7 +219,7 @@ where
 }
 
 /// A streaming UTF-16 decoder.
-struct UTF16Decoder<R>
+struct Utf16Decoder<R>
 where
     R: BufRead,
 {
@@ -229,7 +229,7 @@ where
     buf: Option<u16>,
 }
 
-impl<R> UTF16Decoder<R>
+impl<R> Utf16Decoder<R>
 where
     R: BufRead,
 {
@@ -256,7 +256,7 @@ where
     }
 }
 
-impl<R> Iterator for UTF16Decoder<R>
+impl<R> Iterator for Utf16Decoder<R>
 where
     R: BufRead,
 {
@@ -310,7 +310,7 @@ where
 }
 
 /// A streaming UTF-32 decoder.
-struct UTF32Decoder<R>
+struct Utf32Decoder<R>
 where
     R: BufRead,
 {
@@ -319,7 +319,7 @@ where
     endianness: Endianness,
 }
 
-impl<R> UTF32Decoder<R>
+impl<R> Utf32Decoder<R>
 where
     R: BufRead,
 {
@@ -332,7 +332,7 @@ where
     }
 }
 
-impl<R> Iterator for UTF32Decoder<R>
+impl<R> Iterator for Utf32Decoder<R>
 where
     R: BufRead,
 {
