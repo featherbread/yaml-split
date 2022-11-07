@@ -123,8 +123,8 @@ where
 /// per [`char::encode_utf8`].
 const MAX_UTF8_ENCODED_LEN: usize = 4;
 
-/// A streaming UTF-8 encoder that pairs with [`UTF16Decoder`] or
-/// [`UTF32Decoder`].
+/// A streaming UTF-8 encoder that pairs with [`Utf16Decoder`] or
+/// [`Utf32Decoder`].
 ///
 /// If the source document starts with a BOM, the encoder will skip it and
 /// reading will begin with the actual text content.
