@@ -155,7 +155,7 @@ where
         // remaining space, storing the remainder of any character that we
         // cannot fully emit at this time.
         while !buf.is_empty() {
-            let ch = match self.source.next() {
+            let ch = match self.next_char() {
                 Some(Ok(ch)) => ch,
                 Some(Err(err)) => return Err(err),
                 None => return Ok(written),
