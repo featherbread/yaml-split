@@ -4,7 +4,9 @@ use std::path::PathBuf;
 
 use clap::Parser;
 
+#[allow(dead_code)]
 mod chunker;
+#[allow(dead_code)]
 mod encoding;
 
 use chunker::Chunker;
