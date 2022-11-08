@@ -22,13 +22,13 @@ fn main() {
         None => Box::new(io::stdin().lock()),
         Some(filename) => Box::new(BufReader::new(File::open(filename).unwrap())),
     };
-    for chunk in Chunker::new(Transcoder::from_reader(input).unwrap()) {
-        match chunk {
+    for result in Chunker::new(Transcoder::from_reader(input).unwrap()) {
+        match result {
             Err(err) => panic!("chunker error: {}", err),
-            Ok(chunk) => println!(
+            Ok(doc) => println!(
                 ">>> START CHUNK ({} bytes) >>>|{}|<<< END CHUNK <<<",
-                chunk.len(),
-                chunk,
+                doc.len(),
+                &*doc,
             ),
         }
     }

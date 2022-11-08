@@ -24,12 +24,13 @@ use std::ptr::NonNull;
 use unsafe_libyaml::*;
 
 /// An iterator over individual raw documents in a UTF-8-encoded YAML stream.
-pub struct Chunker<R>
+pub(super) struct Chunker<R>
 where
     R: Read,
 {
     parser: *mut yaml_parser_t,
     read_state: *mut ReadState<R>,
+    document_kind: Option<DocumentKind>,
 }
 
 /// The state for the libyaml input callback.
@@ -52,7 +53,7 @@ where
     /// individual documents. However, `Chunker` requires a UTF-8 stream without
     /// BOMs. Consider using the [`encoding`](super::encoding) module to
     /// re-encode non-UTF-8 streams.
-    pub fn new(reader: R) -> Self {
+    pub(super) fn new(reader: R) -> Self {
         // SAFETY: libyaml is assumed to be correct. To avoid leaking memory, we
         // don't unbox the pointer until after the panic attempt.
         let parser = unsafe {
@@ -76,7 +77,11 @@ where
             yaml_parser_set_input(parser, Self::read_handler, read_state as *mut c_void);
         }
 
-        Self { parser, read_state }
+        Self {
+            parser,
+            read_state,
+            document_kind: None,
+        }
     }
 
     /// Implements [`yaml_read_handler_t`].
@@ -97,13 +102,19 @@ where
 
         let read_state = read_state.cast::<ReadState<R>>();
 
+        // Assuming libyaml is correct, `size` represents the size of an
+        // allocated buffer, the length of which cannot possibly exceed
+        // usize::MAX.
+        #[allow(clippy::cast_possible_truncation)]
+        let size = size as usize;
+
         // TODO: This needs more scrutiny. We can reasonably expect libyaml to
         // pass us a properly allocated buffer of the provided size, however it
         // seems that it might just malloc() this buffer with no further
         // initialization of its contents. u8 shouldn't have any big type-level
         // invariants (unlike e.g. bool), but I don't think that's enough to
         // eliminate the possibility of instant UB on this conversion.
-        let buf = std::slice::from_raw_parts_mut(buffer, size as usize);
+        let buf = std::slice::from_raw_parts_mut(buffer, size);
 
         match (*read_state).reader.read(buf) {
             Ok(len) => {
@@ -125,7 +136,7 @@ impl<R> Iterator for Chunker<R>
 where
     R: Read,
 {
-    type Item = io::Result<String>;
+    type Item = io::Result<Document>;
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
@@ -148,19 +159,32 @@ where
             match event.type_ {
                 YAML_STREAM_END_EVENT => return None,
                 YAML_DOCUMENT_START_EVENT => {
+                    self.document_kind = None;
                     let offset = event.start_mark.index;
                     // SAFETY: We properly initialized self.read_state when the
                     // Chunker was constructed.
                     unsafe { (*self.read_state).reader.trim_to_offset(offset) };
                 }
+                YAML_SCALAR_EVENT => {
+                    self.document_kind.get_or_insert(DocumentKind::Scalar);
+                }
+                YAML_SEQUENCE_START_EVENT | YAML_MAPPING_START_EVENT => {
+                    self.document_kind.get_or_insert(DocumentKind::Collection);
+                }
                 YAML_DOCUMENT_END_EVENT => {
                     let offset = event.end_mark.index;
                     // SAFETY: We properly initialized self.read_state when the
-                    // Chunker was constructed.
-                    let chunk = unsafe { (*self.read_state).reader.take_to_offset(offset) };
-                    // SAFETY: libyaml validates that the input is UTF-8 during
-                    // parsing.
-                    return Some(Ok(unsafe { String::from_utf8_unchecked(chunk) }));
+                    // Chunker was constructed, and libyaml validates that the
+                    // input is UTF-8 during parsing.
+                    let content = unsafe {
+                        String::from_utf8_unchecked(
+                            (*self.read_state).reader.take_to_offset(offset),
+                        )
+                    };
+                    return Some(Ok(Document {
+                        content,
+                        kind: self.document_kind.take().unwrap(),
+                    }));
                 }
                 _ => {}
             };
@@ -180,6 +204,34 @@ where
             drop(Box::from_raw(self.parser));
             drop(Box::from_raw(self.read_state));
         }
+    }
+}
+
+/// A UTF-8 encoded YAML document.
+pub(super) struct Document {
+    content: String,
+    kind: DocumentKind,
+}
+
+/// The type of content contained in a YAML document.
+pub enum DocumentKind {
+    Scalar,
+    Collection,
+}
+
+impl Document {
+    /// Returns true if the content of the document is a scalar rather than a
+    /// collection (sequence or mapping).
+    pub(super) fn is_scalar(&self) -> bool {
+        matches!(self.kind, DocumentKind::Scalar)
+    }
+}
+
+impl Deref for Document {
+    type Target = str;
+
+    fn deref(&self) -> &Self::Target {
+        &self.content
     }
 }
 
@@ -339,7 +391,7 @@ where
     /// Trims from the start of the capture buffer so the next chunk will begin
     /// at the specified reader offset.
     fn trim_to_offset(&mut self, offset: u64) {
-        let trim_len = (offset - self.captured_start_offset) as usize;
+        let trim_len = usize::try_from(offset - self.captured_start_offset).unwrap();
         self.captured_start_offset = offset;
         self.captured.drain(..trim_len);
     }
@@ -347,7 +399,7 @@ where
     /// Takes the chunk from the start of the capture buffer up to the specified
     /// reader offset, leaving bytes beyond the offset in the capture buffer.
     fn take_to_offset(&mut self, offset: u64) -> Vec<u8> {
-        let take_len = (offset - self.captured_start_offset) as usize;
+        let take_len = usize::try_from(offset - self.captured_start_offset).unwrap();
         let tail = self.captured.split_off(take_len);
         self.captured_start_offset = offset;
         mem::replace(&mut self.captured, tail)
