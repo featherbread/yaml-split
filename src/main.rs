@@ -8,7 +8,7 @@ mod chunker;
 mod encoding;
 
 use chunker::Chunker;
-use encoding::Transcoder;
+use encoding::Encoder;
 
 fn main() {
     // SAFETY: libc is assumed to be correct.
@@ -22,7 +22,7 @@ fn main() {
         None => Box::new(io::stdin().lock()),
         Some(filename) => Box::new(BufReader::new(File::open(filename).unwrap())),
     };
-    for result in Chunker::new(Transcoder::from_reader(input).unwrap()) {
+    for result in Chunker::new(Encoder::from_reader(input).unwrap()) {
         match result {
             Err(err) => panic!("chunker error: {}", err),
             Ok(doc) => println!(

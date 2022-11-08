@@ -6,7 +6,7 @@ use std::fmt::{Debug, Display, LowerHex};
 use std::io::{self, BufRead, Read, Write};
 
 /// The possible text encodings of a valid YAML 1.2 stream.
-pub enum Encoding {
+pub(super) enum Encoding {
     Utf8,
     Utf16Big,
     Utf32Big,
@@ -16,7 +16,7 @@ pub enum Encoding {
 
 impl Encoding {
     /// The desired length of the prefix for encoding detection.
-    const DETECT_LEN: usize = 4;
+    pub(super) const DETECT_LEN: usize = 4;
 
     /// Detects the text encoding of a YAML 1.2 stream based on its leading
     /// bytes.
@@ -31,7 +31,7 @@ impl Encoding {
     /// the detection may be incorrect.
     ///
     /// [spec]: https://yaml.org/spec/1.2.2/#52-character-encodings
-    pub fn detect(prefix: &[u8]) -> Encoding {
+    pub(super) fn detect(prefix: &[u8]) -> Encoding {
         if let Some(Ok(prefix)) = prefix.get(0..4).map(TryInto::<[u8; 4]>::try_into) {
             match prefix {
                 [0, 0, 0xFE, 0xFF] | [0, 0, 0, _] => return Encoding::Utf32Big,
@@ -52,16 +52,16 @@ impl Encoding {
 
 /// Reads a YAML 1.2 stream as UTF-8 regardless of its source encoding.
 ///
-/// Given a UTF-16 or UTF-32 YAML stream, a `Transcoder` can transparently
+/// Given a UTF-16 or UTF-32 YAML stream, an `Encoder` can transparently
 /// re-encode it to UTF-8 and strip any initial byte order mark as it is read
 /// from, improving compatibility with parsers that do not accept the full range
-/// of supported YAML encodings. Otherwise, a `Transcoder` can pass through a
+/// of supported YAML encodings. Otherwise, an `Encoder` can pass through a
 /// UTF-8 stream with little overhead.
-pub struct Transcoder<R>(TranscoderKind<R>)
+pub(super) struct Encoder<R>(EncoderKind<R>)
 where
     R: BufRead;
 
-enum TranscoderKind<R>
+enum EncoderKind<R>
 where
     R: BufRead,
 {
@@ -70,15 +70,16 @@ where
     From32(Utf8Encoder<Utf32Decoder<R>>),
 }
 
-impl<R> Transcoder<R>
+impl<R> Encoder<R>
 where
     R: BufRead,
 {
     /// Creates a transcoder using a known source encoding.
-    pub fn new(reader: R, from: Encoding) -> Self {
+    #[allow(clippy::enum_glob_use)]
+    pub(super) fn new(reader: R, from: Encoding) -> Self {
+        use EncoderKind::*;
         use Encoding::*;
         use Endianness::*;
-        use TranscoderKind::*;
 
         Self(match from {
             Utf8 => Passthrough(reader),
@@ -102,19 +103,27 @@ where
             &mut prefix,
         )?;
         let encoding = Encoding::detect(prefix.unread());
-        Ok(Transcoder::new(prefix.chain(reader), encoding))
+        Ok(Encoder::new(prefix.chain(reader), encoding))
     }
 }
 
-impl<R> Read for Transcoder<R>
+impl<R> Read for Encoder<R>
 where
     R: BufRead,
 {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         match &mut self.0 {
-            TranscoderKind::Passthrough(r) => r.read(buf),
-            TranscoderKind::From16(r) => r.read(buf),
-            TranscoderKind::From32(r) => r.read(buf),
+            EncoderKind::Passthrough(r) => r.read(buf),
+            EncoderKind::From16(r) => r.read(buf),
+            EncoderKind::From32(r) => r.read(buf),
+        }
+    }
+
+    fn read_to_string(&mut self, buf: &mut String) -> io::Result<usize> {
+        match &mut self.0 {
+            EncoderKind::Passthrough(r) => r.read_to_string(buf),
+            EncoderKind::From16(r) => r.read_to_string(buf),
+            EncoderKind::From32(r) => r.read_to_string(buf),
         }
     }
 }
@@ -218,6 +227,28 @@ where
 
         Ok(written)
     }
+
+    fn read_to_string(&mut self, buf: &mut String) -> io::Result<usize> {
+        if !self.remainder.is_empty() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "cannot read to string starting from a partial character boundary",
+            ));
+        }
+
+        let mut written = 0;
+        while let Some(next) = self.next_char() {
+            match next {
+                Err(err) if err.kind() == io::ErrorKind::Interrupted => continue,
+                Err(err) => return Err(err),
+                Ok(ch) => {
+                    buf.push(ch);
+                    written += ch.len_utf8();
+                }
+            }
+        }
+        Ok(written)
+    }
 }
 
 /// A streaming UTF-16 decoder.
@@ -282,7 +313,7 @@ where
         if !(0xD800..=0xDFFF).contains(&lead) {
             // SAFETY: This is not a UTF-16 surrogate, which means that the u16
             // code unit directly encodes the desired code point.
-            return Some(Ok(unsafe { char::from_u32_unchecked(lead as u32) }));
+            return Some(Ok(unsafe { char::from_u32_unchecked(u32::from(lead)) }));
         }
 
         if lead >= 0xDC00 {
@@ -305,7 +336,7 @@ where
 
         // At this point, we are confident that we have valid leading and
         // trailing surrogates, and can decode them into the correct code point.
-        let ch = 0x1_0000 + (((lead - 0xD800) as u32) << 10 | (trail - 0xDC00) as u32);
+        let ch = 0x1_0000 + (u32::from(lead - 0xD800) << 10 | u32::from(trail - 0xDC00));
         // SAFETY: We have confirmed that the surrogate pair is valid.
         Some(Ok(unsafe { char::from_u32_unchecked(ch as u32) }))
     }
