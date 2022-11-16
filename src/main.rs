@@ -1,3 +1,5 @@
+#![deny(unsafe_op_in_unsafe_fn)]
+
 use std::fs::File;
 use std::io::{self, BufRead, BufReader};
 use std::path::PathBuf;
