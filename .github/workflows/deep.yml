@@ -4,39 +4,20 @@ on: workflow_dispatch
 env:
   CARGO_TERM_COLOR: always
 jobs:
-  test-linux-msrv:
-    runs-on: ubuntu-latest
+  test-matrix:
+    strategy:
+      matrix:
+        runner: [ubuntu-latest, macos-12, windows-2022]
+        toolchain: [stable, 1.62.1]
+    runs-on: ${{ matrix.runner }}
     steps:
     - name: Checkout
       uses: actions/checkout@v3
     - name: Download Toolchain
-      uses: actions-rs/toolchain@v1
-      with:
-        toolchain: 1.62.1
-        profile: minimal
-    - name: cargo test
-      run: cargo test
-  test-macos-stable:
-    runs-on: macos-12
-    steps:
-    - name: Checkout
-      uses: actions/checkout@v3
-    - name: Download Toolchain
-      uses: actions-rs/toolchain@v1
-      with:
-        toolchain: stable
-        profile: minimal
-    - name: cargo test
-      run: cargo test
-  test-windows-stable:
-    runs-on: windows-2022
-    steps:
-    - name: Checkout
-      uses: actions/checkout@v3
-    - name: Download Toolchain
-      uses: actions-rs/toolchain@v1
-      with:
-        toolchain: stable
-        profile: minimal
+      run: |
+        rustup set profile minimal
+        rustup toolchain install ${{ matrix.toolchain }}
+        rustup default ${{ matrix.toolchain }}
+        rustc --version
     - name: cargo test
       run: cargo test
