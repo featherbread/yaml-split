@@ -1,4 +1,33 @@
 //! Streaming text encoding support for YAML 1.2 streams.
+//!
+//! xt's needs for text encoding don't overlap especially well with the feature
+//! sets that the popular text encoding crates (`encoding` and `encoding_rs`)
+//! provide. Both of these crates are designed around the WHATWG Encoding
+//! Standard, which has two important consequences:
+//!
+//! 1. Both crates support far more text encodings than we actually need, since
+//!    YAML only requires support for Unicode-based encodings, and not legacy
+//!    code pages or other encodings. A past attempt to integrate `encoding_rs`
+//!    into xt increased the size of the full release binary by about 10%,
+//!    despite the fact that we weren't leveraging its full flexibility. In
+//!    contrast, xt's encoding module increases the binary size by less than 2%.
+//!
+//! 2. Neither crate supports UTF-32. While UTF-32 is an exceptionally rare
+//!    encoding, it is called out as a possibility in the YAML 1.2 spec, and
+//!    as such it's something I'm interested in supporting if possible.
+//!
+//! Beyond these two points, xt's encoder provides a natural [`Read`]-based
+//! interface that integrates easily with xt's other streaming components, which
+//! does not seem to be readily available from the third-party crates.
+//!
+//! Obviously, there is some additional mental load and long-term maintenance
+//! cost associated with implementing this kind of thing from scratch. To help
+//! manage that cost, the design of this module is kept relatively simple: a
+//! UTF-8 encoder operates on an [`Iterator`] of `io::Result<char>`, which is
+//! provided by a UTF-16 or UTF-32 decoder. Endianness is represented at a value
+//! level rather than a type level to reduce the number of type instantiations.
+//! All of the core functionality either directly relies on or is heavily
+//! inspired by the Rust standard library.
 
 use std::cmp::min;
 use std::error::Error;
@@ -46,6 +75,8 @@ impl Encoding {
 				_ => {}
 			};
 		}
+		// The spec implies that we should try to match a UTF-8 BOM, but since
+		// UTF-8 is also the default case there's no good reason to.
 		Encoding::Utf8
 	}
 }
@@ -74,8 +105,7 @@ impl<R> Encoder<R>
 where
 	R: BufRead,
 {
-	/// Creates a transcoder using a known source encoding.
-	#[allow(clippy::enum_glob_use)]
+	/// Creates an encoder using a known source encoding.
 	pub(super) fn new(reader: R, from: Encoding) -> Self {
 		use EncoderKind::*;
 		use Encoding::*;
@@ -90,13 +120,13 @@ where
 		})
 	}
 
-	/// Creates a transcoder by detecting the source encoding from the first
-	/// bytes of the reader.
+	/// Creates an encoder by detecting the source encoding from the first bytes
+	/// of the reader.
 	///
 	/// See [`Encoding::detect`] for details of the detection process. Note that
 	/// `from_reader` provides as many prefix bytes to the detector as it needs
 	/// for accurate detection.
-	pub fn from_reader(mut reader: R) -> io::Result<impl Read> {
+	pub(super) fn from_reader(mut reader: R) -> io::Result<impl Read> {
 		let mut prefix = ArrayBuffer::<{ Encoding::DETECT_LEN }>::new();
 		io::copy(
 			&mut (&mut reader).take(Encoding::DETECT_LEN as u64),
@@ -142,8 +172,8 @@ where
 	S: Iterator<Item = io::Result<char>>,
 {
 	source: S,
-	remainder: ArrayBuffer<MAX_UTF8_ENCODED_LEN>,
 	started: bool,
+	remainder: ArrayBuffer<MAX_UTF8_ENCODED_LEN>,
 }
 
 impl<S> Utf8Encoder<S>
@@ -153,20 +183,19 @@ where
 	fn new(source: S) -> Self {
 		Self {
 			source,
-			remainder: ArrayBuffer::new(),
 			started: false,
+			remainder: ArrayBuffer::new(),
 		}
 	}
 
 	fn next_char(&mut self) -> Option<io::Result<char>> {
-		match self.started {
-			true => self.source.next(),
-			false => {
-				self.started = true;
-				match self.source.next() {
-					Some(Ok(ch)) if ch == '\u{FEFF}' => self.source.next(),
-					next => next,
-				}
+		if self.started {
+			self.source.next()
+		} else {
+			self.started = true;
+			match self.source.next() {
+				Some(Ok(ch)) if ch == '\u{FEFF}' => self.source.next(),
+				next => next,
 			}
 		}
 	}
@@ -256,9 +285,9 @@ struct Utf16Decoder<R>
 where
 	R: BufRead,
 {
+	endianness: Endianness,
 	source: R,
 	pos: u64,
-	endianness: Endianness,
 	buf: Option<u16>,
 }
 
@@ -268,20 +297,17 @@ where
 {
 	fn new(source: R, endianness: Endianness) -> Self {
 		Self {
+			endianness,
 			source,
 			pos: 0,
-			endianness,
 			buf: None,
 		}
 	}
 
 	fn next_u16(&mut self) -> io::Result<Option<u16>> {
-		match self.source.fill_buf() {
-			Ok(buf) if buf.is_empty() => return Ok(None),
-			Err(err) => return Err(err),
-			_ => {}
-		};
-
+		if self.source.fill_buf()?.is_empty() {
+			return Ok(None);
+		}
 		let mut next = [0u8; 2];
 		self.source.read_exact(&mut next)?;
 		self.pos += next.len() as u64;
@@ -297,8 +323,8 @@ where
 
 	fn next(&mut self) -> Option<Self::Item> {
 		// This is based on the implementation of `std::char::DecodeUtf16` from
-		// the standard library, but is reworked for improved error handling and
-		// (hopefully) a bit more readability.
+		// the standard library, but is reworked slightly to better support I/O
+		// error handling and apply some Clippy style suggestions.
 
 		let pos = self.pos;
 		let lead = match self.buf.take() {
@@ -309,13 +335,11 @@ where
 				Err(err) => return Some(Err(err)),
 			},
 		};
-
 		if !(0xD800..=0xDFFF).contains(&lead) {
 			// SAFETY: This is not a UTF-16 surrogate, which means that the u16
 			// code unit directly encodes the desired code point.
 			return Some(Ok(unsafe { char::from_u32_unchecked(u32::from(lead)) }));
 		}
-
 		if lead >= 0xDC00 {
 			// Invalid: a UTF-16 trailing surrogate with no leading surrogate.
 			return Some(Err(EncodingError::new(lead, pos).into()));
@@ -334,11 +358,13 @@ where
 			return Some(Err(EncodingError::new(trail, pos).into()));
 		}
 
-		// At this point, we are confident that we have valid leading and
-		// trailing surrogates, and can decode them into the correct code point.
-		let ch = 0x1_0000 + (u32::from(lead - 0xD800) << 10 | u32::from(trail - 0xDC00));
-		// SAFETY: We have confirmed that the surrogate pair is valid.
-		Some(Ok(unsafe { char::from_u32_unchecked(ch as u32) }))
+		// SAFETY: We have confirmed that the two code units form a valid
+		// surrogate pair.
+		Some(Ok(unsafe {
+			char::from_u32_unchecked(
+				0x10000 + (u32::from(lead - 0xD800) << 10 | u32::from(trail - 0xDC00)),
+			)
+		}))
 	}
 }
 
@@ -347,9 +373,9 @@ struct Utf32Decoder<R>
 where
 	R: BufRead,
 {
+	endianness: Endianness,
 	source: R,
 	pos: u64,
-	endianness: Endianness,
 }
 
 impl<R> Utf32Decoder<R>
@@ -358,9 +384,9 @@ where
 {
 	fn new(source: R, endianness: Endianness) -> Self {
 		Self {
+			endianness,
 			source,
 			pos: 0,
-			endianness,
 		}
 	}
 }
@@ -459,10 +485,10 @@ where
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		write!(
 			f,
-			"invalid or unexpected UTF-{} code unit 0x{:x} at byte {}",
-			Self::BIT_SIZE,
-			self.unit,
-			self.pos,
+			"invalid or unexpected UTF-{size} code unit 0x{unit:x} at byte {byte}",
+			size = Self::BIT_SIZE,
+			unit = self.unit,
+			byte = self.pos,
 		)
 	}
 }
@@ -517,9 +543,7 @@ impl<const SIZE: usize> ArrayBuffer<SIZE> {
 		let n = buf.len();
 		debug_assert!(
 			n <= SIZE,
-			"called ArrayBuffer::set with a slice of size {} on an ArrayBuffer of size {}",
-			n,
-			SIZE,
+			"set a {SIZE} byte ArrayBuffer with a slice of {n} bytes"
 		);
 		self.buf[..n].copy_from_slice(buf);
 		self.pos = 0;
@@ -543,6 +567,11 @@ impl<const SIZE: usize> BufRead for ArrayBuffer<SIZE> {
 	}
 
 	fn consume(&mut self, amt: usize) {
+		debug_assert!(
+			amt <= self.unread().len(),
+			"consumed {amt} bytes from an ArrayBuffer with {unread} bytes unread",
+			unread = self.unread().len(),
+		);
 		self.pos += amt;
 	}
 }
