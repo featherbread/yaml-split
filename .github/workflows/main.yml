@@ -18,6 +18,6 @@ jobs:
         rustup default stable
         rustc --version
     - name: cargo test
-      run: cargo +stable test
+      run: cargo test
     - name: cargo clippy
-      run: cargo +stable clippy
+      run: cargo clippy
