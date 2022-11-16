@@ -1,0 +1,23 @@
+---
+name: yaml-split main
+on:
+  push:
+    branches: [main]
+env:
+  CARGO_TERM_COLOR: always
+jobs:
+  test-lint-linux-stable:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+    - name: Download Toolchain
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        profile: minimal
+        components: clippy
+    - name: cargo test
+      run: cargo test
+    - name: cargo clippy
+      run: cargo clippy
