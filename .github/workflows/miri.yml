@@ -1,0 +1,19 @@
+---
+name: yaml-split Deep Tests
+on: workflow_dispatch
+env:
+  CARGO_TERM_COLOR: always
+jobs:
+  linux-miri:
+    runs-on: ubuntu-22.04
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+    - name: Download Toolchain
+      run: |
+        rustup set profile minimal
+        rustup toolchain install nightly --component miri --allow-downgrade
+        rustup default nightly
+        rustc --version
+    - name: cargo miri test
+      run: cargo miri test
