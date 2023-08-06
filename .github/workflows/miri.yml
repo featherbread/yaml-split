@@ -1,5 +1,5 @@
 ---
-name: yaml-split Deep Tests
+name: yaml-split Miri Tests
 on: workflow_dispatch
 env:
   CARGO_TERM_COLOR: always
