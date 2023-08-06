@@ -50,7 +50,7 @@ impl Encoding {
 	/// Detects the text encoding of a YAML 1.2 stream based on its leading
 	/// bytes.
 	///
-	/// The detection algorithm is defined in [section 5.2 of the YAML 1.22
+	/// The detection algorithm is defined in [section 5.2 of the YAML 1.2.2
 	/// specification][spec], and relies on the fact that a valid YAML stream
 	/// must begin with either a Unicode byte order mark or an ASCII character.
 	/// Detection behavior for non-YAML inputs is not well-defined.
@@ -129,7 +129,7 @@ where
 	pub(super) fn from_reader(mut reader: R) -> io::Result<impl Read> {
 		let mut prefix = ArrayBuffer::<{ Encoding::DETECT_LEN }>::new();
 		io::copy(
-			&mut (&mut reader).take(Encoding::DETECT_LEN as u64),
+			&mut reader.by_ref().take(Encoding::DETECT_LEN as u64),
 			&mut prefix,
 		)?;
 		let encoding = Encoding::detect(prefix.unread());
@@ -146,14 +146,6 @@ where
 			EncoderKind::Passthrough(r) => r.read(buf),
 			EncoderKind::From16(r) => r.read(buf),
 			EncoderKind::From32(r) => r.read(buf),
-		}
-	}
-
-	fn read_to_string(&mut self, buf: &mut String) -> io::Result<usize> {
-		match &mut self.0 {
-			EncoderKind::Passthrough(r) => r.read_to_string(buf),
-			EncoderKind::From16(r) => r.read_to_string(buf),
-			EncoderKind::From32(r) => r.read_to_string(buf),
 		}
 	}
 }
@@ -256,28 +248,6 @@ where
 
 		Ok(written)
 	}
-
-	fn read_to_string(&mut self, buf: &mut String) -> io::Result<usize> {
-		if !self.remainder.is_empty() {
-			return Err(io::Error::new(
-				io::ErrorKind::InvalidData,
-				"cannot read to string starting from a partial character boundary",
-			));
-		}
-
-		let mut written = 0;
-		while let Some(next) = self.next_char() {
-			match next {
-				Err(err) if err.kind() == io::ErrorKind::Interrupted => continue,
-				Err(err) => return Err(err),
-				Ok(ch) => {
-					buf.push(ch);
-					written += ch.len_utf8();
-				}
-			}
-		}
-		Ok(written)
-	}
 }
 
 /// A streaming UTF-16 decoder.
@@ -335,15 +305,17 @@ where
 				Err(err) => return Some(Err(err)),
 			},
 		};
-		if !(0xD800..=0xDFFF).contains(&lead) {
-			// SAFETY: This is not a UTF-16 surrogate, which means that the u16
-			// code unit directly encodes the desired code point.
-			return Some(Ok(unsafe { char::from_u32_unchecked(u32::from(lead)) }));
-		}
-		if lead >= 0xDC00 {
-			// Invalid: a UTF-16 trailing surrogate with no leading surrogate.
-			return Some(Err(EncodingError::new(lead, pos).into()));
-		}
+		match lead {
+			0x0000..=0xD7FF | 0xE000..=0xFFFF => {
+				// SAFETY: This is not a UTF-16 surrogate, which means that the
+				// u16 code unit directly encodes the desired code point.
+				return Some(Ok(unsafe { char::from_u32_unchecked(u32::from(lead)) }));
+			}
+			// Leading surrogate; continue on to decode the trailing surrogate.
+			0xD800..=0xDBFF => {}
+			// Trailing surrogate; invalid without a leading surrogate.
+			0xDC00..=0xDFFF => return Some(Err(EncodingError::new(lead, pos).into())),
+		};
 
 		let pos = self.pos;
 		let trail = match self.next_u16() {
@@ -352,14 +324,14 @@ where
 			Err(err) => return Some(Err(err)),
 		};
 		if !(0xDC00..=0xDFFF).contains(&trail) {
-			// Invalid: we needed a trailing surrogate and didn't get one. We'll
-			// try to decode this as a leading code unit on the next iteration.
+			// We needed a trailing surrogate and didn't get one. We'll try to
+			// decode this as a leading code unit on the next iteration.
 			self.buf = Some(trail);
 			return Some(Err(EncodingError::new(trail, pos).into()));
 		}
 
-		// SAFETY: We have confirmed that the two code units form a valid
-		// surrogate pair.
+		// SAFETY: All of the above checks have confirmed that the two code
+		// units form a valid surrogate pair.
 		Some(Ok(unsafe {
 			char::from_u32_unchecked(
 				0x10000 + (u32::from(lead - 0xD800) << 10 | u32::from(trail - 0xDC00)),
@@ -399,9 +371,9 @@ where
 
 	fn next(&mut self) -> Option<Self::Item> {
 		match self.source.fill_buf() {
-			Ok(buf) if buf.is_empty() => return None,
 			Err(err) => return Some(Err(err)),
-			_ => {}
+			Ok(buf) if buf.is_empty() => return None,
+			Ok(_) => {}
 		};
 
 		let pos = self.pos;

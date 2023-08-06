@@ -29,11 +29,14 @@ fn main() {
 	for result in Chunker::new(Encoder::from_reader(input).unwrap()) {
 		match result {
 			Err(err) => panic!("chunker error: {}", err),
-			Ok(doc) => println!(
-				">>> START CHUNK ({} bytes) >>>|{}|<<< END CHUNK <<<",
-				doc.len(),
-				&*doc,
-			),
+			Ok(doc) => {
+				let doc = doc.content();
+				println!(
+					">>> START CHUNK ({} bytes) >>>|{}|<<< END CHUNK <<<",
+					doc.len(),
+					doc,
+				)
+			}
 		}
 	}
 }
