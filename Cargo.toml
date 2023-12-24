@@ -7,9 +7,9 @@ edition = "2021"
 unsafe-libyaml = "0.2.9"
 
 [dependencies.clap]
-version = "3.2.25"
+version = "4.4.11"
 default-features = false
-features = ["std", "derive", "cargo"]
+features = ["std", "derive", "help", "usage"]
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2.147"
