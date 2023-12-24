@@ -7,8 +7,9 @@ jobs:
   init-release:
     runs-on: ubuntu-22.04
     steps:
-    - name: Release
+    - name: Create Release
       uses: softprops/action-gh-release@v1
+      if: startsWith(github.ref, 'refs/tags/')
       with:
         body: >-
           yaml-split exists for testing purposes only. The binaries in this
@@ -39,6 +40,7 @@ jobs:
         mv target/${{ matrix.target }}/release/yaml-split yaml-split-${{ matrix.target }}
     - name: Upload
       uses: softprops/action-gh-release@v1
+      if: startsWith(github.ref, 'refs/tags/')
       with:
         files: yaml-split-${{ matrix.target }}
 
@@ -65,5 +67,6 @@ jobs:
         move target\${{ matrix.target }}\release\yaml-split.exe yaml-split-${{ matrix.target }}.exe
     - name: Upload
       uses: softprops/action-gh-release@v1
+      if: startsWith(github.ref, 'refs/tags/')
       with:
         files: yaml-split-${{ matrix.target }}.exe
