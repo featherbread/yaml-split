@@ -107,7 +107,7 @@ checksum = "ab4c90930b95a82d00dc9e9ac071b4991924390d46cbd0dfe566148667605e4b"
 
 [[package]]
 name = "yaml-split"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "clap",
  "hex-literal",
