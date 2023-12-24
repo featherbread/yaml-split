@@ -10,6 +10,8 @@ jobs:
     - name: Release
       uses: softprops/action-gh-release@v1
       with:
+        name: ${{ github.ref_name }}
+        tag_name: ${{ github.ref_name }}
         draft: true
         body: >-
           yaml-split exists for testing purposes only. The binaries in this
@@ -41,6 +43,8 @@ jobs:
     - name: Upload
       uses: softprops/action-gh-release@v1
       with:
+        name: ${{ github.ref_name }}
+        tag_name: ${{ github.ref_name }}
         files: yaml-split-${{ matrix.target }}
 
   build-binaries-windows:
@@ -67,6 +71,8 @@ jobs:
     - name: Upload
       uses: softprops/action-gh-release@v1
       with:
+        name: ${{ github.ref_name }}
+        tag_name: ${{ github.ref_name }}
         files: yaml-split-${{ matrix.target }}.exe
 
   finish-release:
@@ -78,4 +84,6 @@ jobs:
     - name: Release
       uses: softprops/action-gh-release@v1
       with:
+        name: ${{ github.ref_name }}
+        tag_name: ${{ github.ref_name }}
         draft: false
