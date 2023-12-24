@@ -561,3 +561,217 @@ impl<const SIZE: usize> Write for ArrayBuffer<SIZE> {
 		Ok(())
 	}
 }
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	use hex_literal::hex;
+
+	#[test]
+	fn encode_valid_utf16be() {
+		assert_valid_encoding("hello", || {
+			Encoder::new(
+				&hex!("00 68 00 65 00 6c 00 6c 00 6f")[..],
+				Encoding::Utf16Big,
+			)
+		});
+	}
+
+	#[test]
+	fn encode_valid_utf16le() {
+		assert_valid_encoding("world", || {
+			Encoder::new(
+				&hex!("77 00 6f 00 72 00 6c 00 64 00")[..],
+				Encoding::Utf16Little,
+			)
+		});
+	}
+
+	#[test]
+	fn encode_valid_utf32be() {
+		assert_valid_encoding("hello", || {
+			Encoder::new(
+				&hex!("00 00 00 68 00 00 00 65 00 00 00 6c 00 00 00 6c 00 00 00 6f")[..],
+				Encoding::Utf32Big,
+			)
+		});
+	}
+
+	#[test]
+	fn encode_valid_utf32le() {
+		assert_valid_encoding("world", || {
+			Encoder::new(
+				&hex!("77 00 00 00 6f 00 00 00 72 00 00 00 6c 00 00 00 64 00 00 00")[..],
+				Encoding::Utf32Little,
+			)
+		});
+	}
+
+	fn assert_valid_encoding<R, F>(expected: &'static str, make_encoder: F)
+	where
+		R: Read,
+		F: Fn() -> R,
+	{
+		let mut result = vec![];
+		make_encoder().read_to_end(&mut result).unwrap();
+		assert_eq!(std::str::from_utf8(&result), Ok(expected));
+
+		let result = io::read_to_string(make_encoder()).unwrap();
+		assert_eq!(result, expected);
+	}
+
+	#[test]
+	fn encode_valid_utf16be_small_buffer() {
+		let input = &hex!("00 68 00 65 00 6c 00 6c 00 6f 00 20 d8 3d dd a5")[..];
+		let mut encoder = Encoder::new(input, Encoding::Utf16Big);
+
+		let mut buf = [0u8; 1];
+		let mut result = vec![];
+		loop {
+			match encoder.read(&mut buf[..]) {
+				Ok(0) => break,
+				Ok(1) => result.extend_from_slice(&buf[..]),
+				Ok(n) => panic!("somehow read {n} bytes into a 1-byte buffer"),
+				Err(err) => panic!("{err}"),
+			}
+		}
+
+		assert_eq!(std::str::from_utf8(&result), Ok("hello 🖥"));
+	}
+
+	#[test]
+	fn encode_valid_utf16le_empty() {
+		let mut encoder = Encoder::new(io::empty(), Encoding::Utf16Little);
+		assert_eq!(encoder.read_to_end(&mut vec![]).unwrap(), 0usize);
+	}
+
+	#[test]
+	fn encode_valid_utf32be_empty() {
+		let mut encoder = Encoder::new(io::empty(), Encoding::Utf32Big);
+		assert_eq!(encoder.read_to_end(&mut vec![]).unwrap(), 0usize);
+	}
+
+	#[test]
+	fn encode_to_string_invalid_inside_character() {
+		let input = &hex!("d8 3d dd a5")[..];
+		let mut encoder = Encoder::new(input, Encoding::Utf16Big);
+		io::copy(&mut encoder.by_ref().take(1), &mut io::sink()).unwrap();
+		let err = io::read_to_string(encoder).unwrap_err();
+		assert_eq!(err.kind(), io::ErrorKind::InvalidData);
+	}
+
+	#[test]
+	fn encode_invalid_utf16be_unpaired_lead() {
+		let input = &hex!("00 68 00 69 d8 3d 00 0a")[..];
+		let encoder = Encoder::new(input, Encoding::Utf16Big);
+		let err = io::read_to_string(encoder).unwrap_err();
+
+		assert_eq!(err.kind(), io::ErrorKind::InvalidData);
+
+		let err = err
+			.get_ref()
+			.unwrap()
+			.downcast_ref::<EncodingError<u16>>()
+			.unwrap();
+		// TODO: We intentionally say that the "unexpected" code unit is the one
+		// that isn't a trailing surrogate, which is technically correct but
+		// could be more detailed (i.e. we should perhaps say that there's an
+		// unpaired surrogate and give that position instead).
+		assert_eq!(err.unit, 0x0a);
+		assert_eq!(err.pos, 6);
+	}
+
+	#[test]
+	fn encode_invalid_utf16be_unpaired_lead_eof() {
+		let input = &hex!("00 68 00 69 d8 3d")[..];
+		let encoder = Encoder::new(input, Encoding::Utf16Big);
+		let err = io::read_to_string(encoder).unwrap_err();
+		assert_eq!(err.kind(), io::ErrorKind::UnexpectedEof);
+	}
+
+	#[test]
+	fn encode_invalid_utf16le_unpaired_trail() {
+		let input = &hex!("68 00 69 00 a5 dd 0a 00")[..];
+		let mut encoder = Encoder::new(input, Encoding::Utf16Little);
+		let err = encoder.read_to_end(&mut vec![]).unwrap_err();
+
+		assert_eq!(err.kind(), io::ErrorKind::InvalidData);
+
+		let err = err
+			.get_ref()
+			.unwrap()
+			.downcast_ref::<EncodingError<u16>>()
+			.unwrap();
+		assert_eq!(err.unit, 0xdda5);
+		assert_eq!(err.pos, 4);
+	}
+
+	#[test]
+	fn encode_invalid_utf16le_truncated() {
+		let input = &hex!("68 00 69 00 a5")[..];
+		let mut encoder = Encoder::new(input, Encoding::Utf16Little);
+		let err = encoder.read_to_end(&mut vec![]).unwrap_err();
+		assert_eq!(err.kind(), io::ErrorKind::UnexpectedEof);
+	}
+
+	#[test]
+	fn encode_invalid_utf32be_surrogate_value() {
+		let input = &hex!("00 00 00 68 00 00 00 69 00 00 d8 3d 00 00 dd a5")[..];
+		let mut encoder = Encoder::new(input, Encoding::Utf32Big);
+		let err = encoder.read_to_end(&mut vec![]).unwrap_err();
+
+		assert_eq!(err.kind(), io::ErrorKind::InvalidData);
+
+		let err = err
+			.get_ref()
+			.unwrap()
+			.downcast_ref::<EncodingError<u32>>()
+			.unwrap();
+		assert_eq!(err.unit, 0xd83d);
+		assert_eq!(err.pos, 8);
+	}
+
+	#[test]
+	fn encode_invalid_utf32le_truncated() {
+		let input = &hex!("68 00 00 00 69 00 00")[..];
+		let mut encoder = Encoder::new(input, Encoding::Utf32Little);
+		let err = encoder.read_to_end(&mut vec![]).unwrap_err();
+		assert_eq!(err.kind(), io::ErrorKind::UnexpectedEof);
+	}
+
+	#[test]
+	fn arraybuffer_write_read() {
+		const INPUT: &str = "hi 🖥️";
+
+		let mut buf = ArrayBuffer::<10>::new();
+		assert!(buf.write_all(INPUT.as_bytes()).is_ok());
+		assert!(buf.flush().is_ok());
+
+		assert_eq!(io::read_to_string(buf).unwrap(), INPUT);
+	}
+
+	#[test]
+	fn arraybuffer_set_bufread() {
+		const INPUT: &str = "hello world";
+
+		let mut buf = ArrayBuffer::<{ INPUT.len() }>::new();
+		buf.set(INPUT.as_bytes());
+
+		assert_eq!(buf.fill_buf().unwrap(), INPUT.as_bytes());
+
+		buf.consume("hello ".len());
+		assert_eq!(buf.fill_buf().unwrap(), INPUT["hello ".len()..].as_bytes());
+
+		assert_eq!(io::read_to_string(buf).unwrap(), "world");
+	}
+
+	#[test]
+	fn arraybuffer_write_too_big() {
+		const INPUT: &str = "whoops";
+
+		let mut buf = ArrayBuffer::<1>::new();
+		let err = buf.write_all(INPUT.as_bytes()).unwrap_err();
+		assert_eq!(err.kind(), io::ErrorKind::WriteZero);
+	}
+}
