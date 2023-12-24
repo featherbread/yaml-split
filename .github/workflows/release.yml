@@ -1,0 +1,79 @@
+---
+name: yaml-split Release
+on: workflow_dispatch
+env:
+  CARGO_TERM_COLOR: always
+jobs:
+  create-draft:
+    runs-on: ubuntu-22.04
+    steps:
+    - name: Release
+      uses: softprops/action-gh-release@v1
+      with:
+        draft: true
+        body: >-
+          yaml-split exists for testing purposes only. The binaries in this
+          release may or may not work. There is no meaningful changelog.
+
+  build-binaries-unix:
+    needs: create-draft
+    strategy:
+      matrix:
+        include:
+        - { target: x86_64-unknown-linux-gnu,  runner: ubuntu-22.04 }
+        - { target: x86_64-unknown-linux-musl, runner: ubuntu-22.04 }
+        - { target: x86_64-apple-darwin,       runner: macos-12 }
+    runs-on: ${{ matrix.runner }}
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+    - name: Download Toolchain
+      run: |
+        rustup set profile minimal
+        rustup toolchain install stable
+        rustup default stable
+        rustc --version
+    - name: Build
+      run: |
+        cargo build --release --target ${{ matrix.target }}
+        mv target/${{ matrix.target }}/release/yaml-split yaml-split-${{ matrix.target }}
+    - name: Upload
+      uses: softprops/action-gh-release@v1
+      with:
+        files: yaml-split-${{ matrix.target }}
+
+  build-binaries-windows:
+    needs: create-draft
+    strategy:
+      matrix:
+        include:
+        - { target: x86_64-pc-windows-msvc, runner: windows-2022 }
+    runs-on: ${{ matrix.runner }}
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+    - name: Download Toolchain
+      run: |
+        rustup set profile minimal
+        rustup toolchain install stable
+        rustup default stable
+        rustc --version
+    - name: Build
+      run: |
+        cargo build --release --target ${{ matrix.target }}
+        move target\${{ matrix.target }}\release\yaml-split.exe yaml-split-${{ matrix.target }}.exe
+    - name: Upload
+      uses: softprops/action-gh-release@v1
+      with:
+        files: yaml-split-${{ matrix.target }}.exe
+
+  finish-release:
+    needs:
+    - build-binaries-unix
+    - build-binaries-windows
+    runs-on: ubuntu-22.04
+    steps:
+    - name: Release
+      uses: softprops/action-gh-release@v1
+      with:
+        draft: false
