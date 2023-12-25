@@ -18,6 +18,7 @@ jobs:
   build-binaries-unix:
     needs: init-release
     strategy:
+      fail-fast: false
       matrix:
         include:
         - { target: aarch64-apple-darwin,           runner: macos-12 }
@@ -52,6 +53,7 @@ jobs:
   build-binaries-windows:
     needs: init-release
     strategy:
+      fail-fast: false
       matrix:
         include:
         - { target: x86_64-pc-windows-msvc,  runner: windows-2022 }
