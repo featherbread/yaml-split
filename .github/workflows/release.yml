@@ -49,7 +49,9 @@ jobs:
     - name: Build
       run: |
         cargo build --release --target ${{ matrix.target }}
-        tar -czvf yaml-split-${{ matrix.target }}.tar.gz -C target/${{ matrix.target }}/release yaml-split
+        mkdir -p dist/yaml-split
+        cp LICENSE.txt target/${{ matrix.target }}/release/yaml-split dist/yaml-split/
+        tar -czvf yaml-split-${{ matrix.target }}.tar.gz -C dist .
     - name: Upload
       uses: softprops/action-gh-release@v1
       if: startsWith(github.ref, 'refs/tags/')
