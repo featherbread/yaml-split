@@ -69,6 +69,7 @@ jobs:
     - name: Assemble Archives
       run: |
         gunzip -v ./yaml-split-*/yaml-split.gz
+        chmod -vv +x ./yaml-split-*/yaml-split
         for dir in ./yaml-split-*; do
           cp -v licenses/LICENSES.html $dir/
           tar -czvf $dir.tar.gz $dir
