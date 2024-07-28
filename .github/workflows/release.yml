@@ -73,13 +73,11 @@ jobs:
       uses: actions/download-artifact@v4
     - name: Assemble Archives
       run: |
-        ls -alR .
         for targetdir in ./target-*; do
           tar -xvf $targetdir/target.tar.gz
           make dist/yaml-split-${targetdir#./target-}.tar.gz
         done
         (cd dist && sha256sum yaml-split-*.tar.gz > SHA256SUMS)
-        ls -alR .
     - name: Upload Release Artifacts
       if: startsWith(github.ref, 'refs/heads/')
       uses: actions/upload-artifact@v4
@@ -100,7 +98,6 @@ jobs:
           projects. **It is not supported or maintained in any meaningful way.**
 
 
-          Binary releases of yaml-split are available for select UNIX(-like)
-          platforms as attachments to this GitHub Release. They are statically
-          linked (on Linux), or link only to the platform's standard libraries
-          (on macOS).
+          Binary releases of yaml-split are available for Linux and macOS as
+          attachments to this GitHub Release. They are statically linked (on
+          Linux), or link only to the platform's standard libraries (on macOS).
