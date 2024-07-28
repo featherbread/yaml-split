@@ -1,0 +1,33 @@
+.Dd July 28, 2024
+.Dt YAML-SPLIT 1
+.Os
+.Sh NAME
+.Nm yaml-split
+.Nd shows the splits between documents in a YAML file
+.Sh SYNOPSIS
+.Nm
+.Op Ar inputfile
+.Pp
+.Nm
+.Op Fl h | Fl Fl help
+.Sh DESCRIPTION
+.Nm
+reads a stream of YAML documents from
+.Ar inputfile ,
+or from standard input if no
+.Ar inputfile
+is given,
+and outputs each document with markers showing where it starts and ends.
+.Ss Options
+.Bl -tag -width Ds
+.It Fl h , Fl Fl help
+Print a usage summary, then exit.
+.El
+.Sh EXIT STATUS
+.Ex -std
+.Sh AUTHORS
+.An Alex Hamlin Aq Mt yaml-split@alexhamlin.co
+.Sh CAVEATS
+.Nm
+exists mainly to test GitHub workflows for Rust programs,
+and is not intended to be useful for anything else.

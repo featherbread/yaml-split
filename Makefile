@@ -3,7 +3,7 @@ dist/yaml-split-%.tar.gz: dist/yaml-split-%
 
 .PRECIOUS: dist/yaml-split-%
 
-dist/yaml-split-%: doc/RELEASE-README.txt doc/LICENSES.html target/%/release-opt/yaml-split
+dist/yaml-split-%: doc/RELEASE-README.txt doc/yaml-split.1 doc/LICENSES.html target/%/release-opt/yaml-split
 	rm -rf $@
 	mkdir -p $@
 	cp $^ $@/
