@@ -52,13 +52,14 @@ jobs:
         rustc --version
     - name: Build
       run: |
-        cargo build --target ${{ matrix.target }} --profile release-opt
-        gzip -c target/${{ matrix.target }}/release-opt/yaml-split > yaml-split.gz
+        bin="target/${{ matrix.target }}/release-opt/yaml-split"
+        make "$bin"
+        tar -czvf target.tar.gz "$bin"
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: yaml-split-${{ matrix.target }}
-        path: yaml-split.gz
+        name: target-${{ matrix.target }}
+        path: target.tar.gz
 
   create-release:
     needs: [build-doc, build-binaries-unix]
@@ -70,29 +71,28 @@ jobs:
       uses: actions/download-artifact@v4
     - name: Assemble Archives
       run: |
-        gunzip -v ./yaml-split-*/yaml-split.gz
-        chmod -vv +x ./yaml-split-*/yaml-split
-        for dir in ./yaml-split-*; do
-          cp -v doc/RELEASE.txt $dir/README.txt
-          cp -v doc/LICENSES.html $dir/LICENSES.html
-          tar -czvf $dir.tar.gz $dir
+        ls -alR .
+        for targetdir in ./target-*; do
+          tar -xvf $targetdir/target.tar.gz
+          make dist/yaml-split-${targetdir#target-}.tar.gz
         done
-        sha256sum yaml-split-*.tar.gz > SHA256SUMS
+        (cd dist && sha256sum yaml-split-*.tar.gz > SHA256SUMS)
+        ls -alR .
     - name: Upload Release Artifacts
       if: startsWith(github.ref, 'refs/heads/')
       uses: actions/upload-artifact@v4
       with:
         name: release
         path: |
-          yaml-split-*.tar.gz
-          SHA256SUMS
+          dist/yaml-split-*.tar.gz
+          dist/SHA256SUMS
     - name: Create Release
       uses: softprops/action-gh-release@v2
       if: startsWith(github.ref, 'refs/tags/')
       with:
         files: |
-          yaml-split-*.tar.gz
-          SHA256SUMS
+          dist/yaml-split-*.tar.gz
+          dist/SHA256SUMS
         body: >-
           yaml-split is a silly program I use to test GitHub Actions for Rust
           projects. **It is not supported or maintained in any meaningful way.**
