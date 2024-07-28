@@ -10,19 +10,18 @@
 			</div>
 			<div class="licenses-list">
 				{{#each licenses}}
-				<div class="license">
-					<h2 id="{{id}}">{{name}}</h2>
-					{{#if (gt (len used_by) 1)}}
-					For:
-					<ul class="license-used-by">
-						{{#each used_by}}
-						<li><a href="{{#if crate.repository}} {{crate.repository}} {{else}} https://crates.io/crates/{{crate.name}} {{/if}}">{{crate.name}} {{crate.version}}</a></li>
-						{{/each}}
-					</ul>
+					<div class="license">
+					{{# if (eq (len used_by) 1)}}
+						{{#with (lookup used_by 0)}}
+						<h2><a href="{{#if crate.repository}}{{crate.repository}}{{else}}https://crates.io/crates/{{crate.name}}{{/if}}">{{crate.name}} {{crate.version}}</a></h2>
+						{{/with}}
 					{{else}}
-					{{#with (lookup used_by 0)}}
-					For <a href="{{#if crate.repository}} {{crate.repository}} {{else}} https://crates.io/crates/{{crate.name}} {{/if}}">{{crate.name}} {{crate.version}}</a>
-					{{/with}}
+						<h2>{{name}} ({{len used_by}} crates)</h2>
+						<ul class="license-used-by">
+							{{#each used_by}}
+							<li><a href="{{#if crate.repository}} {{crate.repository}} {{else}} https://crates.io/crates/{{crate.name}} {{/if}}">{{crate.name}} {{crate.version}}</a></li>
+							{{/each}}
+						</ul>
 					{{/if}}
 					<pre class="license-text">{{text}}</pre>
 				</div>

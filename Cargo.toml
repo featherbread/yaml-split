@@ -2,6 +2,8 @@
 name = "yaml-split"
 version = "0.1.6"
 edition = "2021"
+license = "MIT"
+repository = "https://github.com/ahamlinman/yaml-split"
 
 [dependencies]
 unsafe-libyaml = "0.2.9"
