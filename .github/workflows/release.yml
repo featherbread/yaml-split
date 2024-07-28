@@ -67,6 +67,10 @@ jobs:
     permissions:
       contents: write
     steps:
+    - name: Download Makefile
+      uses: actions/checkout@v4
+      with:
+        sparse-checkout: Makefile
     - name: Download Artifacts
       uses: actions/download-artifact@v4
     - name: Assemble Archives
