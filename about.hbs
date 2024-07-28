@@ -2,31 +2,38 @@
 	<head>
 		<title>yaml-split Licenses</title>
 	</head>
+
 	<body>
-		<main class="container">
-			<div class="intro">
-				<h1>Licenses</h1>
-				<p>This page lists the licenses of code incorporated into yaml-split.</p>
-			</div>
-			<div class="licenses-list">
-				{{#each licenses}}
-					<div class="license">
-					{{# if (eq (len used_by) 1)}}
-						{{#with (lookup used_by 0)}}
-						<h2><a href="{{#if crate.repository}}{{crate.repository}}{{else}}https://crates.io/crates/{{crate.name}}{{/if}}">{{crate.name}} {{crate.version}}</a></h2>
-						{{/with}}
-					{{else}}
-						<h2>{{name}} ({{len used_by}} crates)</h2>
-						<ul class="license-used-by">
-							{{#each used_by}}
-							<li><a href="{{#if crate.repository}} {{crate.repository}} {{else}} https://crates.io/crates/{{crate.name}} {{/if}}">{{crate.name}} {{crate.version}}</a></li>
-							{{/each}}
-						</ul>
-					{{/if}}
-					<pre class="license-text">{{text}}</pre>
-				</div>
-				{{/each}}
-			</div>
+		<main>
+			<h1>Licenses</h1>
+			<p>
+				All of the source code for yaml-split is available under the terms of the
+				<a href="https://www.gnu.org/philosophy/free-sw.html">free</a>
+				and
+				<a href="https://opensource.org/osd">open source</a>
+				licenses provided below.
+			</p>
+			<p>
+				The yaml-split binary in this release is made available under the same MIT License that covers the source code.
+			</p>
+
+			{{#each licenses}}
+			<section>
+				{{# if (eq (len used_by) 1)}}
+					{{#with (lookup used_by 0)}}
+					<h2><a href="{{#if crate.repository}}{{crate.repository}}{{else}}https://crates.io/crates/{{crate.name}}{{/if}}">{{crate.name}} {{crate.version}}</a></h2>
+					{{/with}}
+				{{else}}
+					<h2>{{name}} ({{len used_by}} crates)</h2>
+					<ul>
+						{{#each used_by}}
+						<li><a href="{{#if crate.repository}} {{crate.repository}} {{else}} https://crates.io/crates/{{crate.name}} {{/if}}">{{crate.name}} {{crate.version}}</a></li>
+						{{/each}}
+					</ul>
+				{{/if}}
+				<pre>{{text}}</pre>
+			</section>
+			{{/each}}
 		</main>
 	</body>
 </html>
