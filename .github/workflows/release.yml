@@ -67,7 +67,7 @@ jobs:
     - name: Download Artifacts
       uses: actions/download-artifact@v4
     - name: List Everything
-      run: ls -al
+      run: ls -alR
     - name: Create Release
       uses: softprops/action-gh-release@v1
       if: startsWith(github.ref, 'refs/tags/')
