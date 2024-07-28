@@ -10,13 +10,12 @@
 			<h1>Licenses</h1>
 			<p>
 				All of the source code for {{> nm}} is available under the terms of the
-				<a href="https://www.gnu.org/philosophy/free-sw.html">free</a>
-				and
 				<a href="https://opensource.org/osd">open source</a>
 				licenses provided below.
 			</p>
 			<p>
-				The {{> nm}} binary in this release is made available under the same MIT License that covers the source code.
+				The {{> nm}} binary in this release is made available
+				under the same MIT License that covers the source code.
 			</p>
 
 			{{#each licenses}}
@@ -26,6 +25,7 @@
 					{{#with (lookup used_by 0)}}
 					<h2>{{> cratelink}}</h2>
 					{{/with}}
+					<h4>{{name}}</h4>
 				{{else}}
 					<h2>{{name}} ({{len used_by}} crates)</h2>
 					<ul>

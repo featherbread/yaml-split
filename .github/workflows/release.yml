@@ -7,22 +7,22 @@ on:
 env:
   CARGO_TERM_COLOR: always
 jobs:
-  build-about:
+  build-release-docs:
     runs-on: ubuntu-22.04
     steps:
     - name: Checkout
       uses: actions/checkout@v4
-    - name: Download cargo-about
+    - name: Generate LICENSES.html
       run: |
         version=0.6.2
         slug=cargo-about-$version-x86_64-unknown-linux-musl
         wget https://github.com/EmbarkStudios/cargo-about/releases/download/$version/$slug.tar.gz
         tar -xvf $slug.tar.gz --strip-components=1 $slug/cargo-about
         ./cargo-about generate about.hbs > LICENSES.html
-    - name: Upload LICENSES.html
+    - name: Upload Artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: licenses
+        name: release-docs
         path: LICENSES.html
 
   build-binaries-unix:
@@ -59,7 +59,7 @@ jobs:
         path: yaml-split.gz
 
   create-release:
-    needs: [build-about, build-binaries-unix]
+    needs: [build-release-docs, build-binaries-unix]
     runs-on: ubuntu-22.04
     permissions:
       contents: write
@@ -71,7 +71,7 @@ jobs:
         gunzip -v ./yaml-split-*/yaml-split.gz
         chmod -vv +x ./yaml-split-*/yaml-split
         for dir in ./yaml-split-*; do
-          cp -v licenses/LICENSES.html $dir/
+          cp -v release-docs/LICENSES.html $dir/
           tar -czvf $dir.tar.gz $dir
         done
         sha256sum yaml-split-*.tar.gz > SHA256SUMS
@@ -87,13 +87,15 @@ jobs:
       uses: softprops/action-gh-release@v2
       if: startsWith(github.ref, 'refs/tags/')
       with:
-        body: |
-          **Note:** yaml-split release binaries are built automatically on a
-          _best-effort_ basis for a subset of the platforms on which yaml-split
-          is tested.
-
-          yaml-split is a silly little program I use to test GitHub Actions for
-          Rust projects. There is no formal changelog, nor any serious support.
         files: |
           yaml-split-*.tar.gz
           SHA256SUMS
+        body: >-
+          yaml-split is a silly program I use to test GitHub Actions for Rust
+          projects. **It is not supported or maintained in any meaningful way.**
+
+
+          Binary releases of yaml-split are available for select UNIX(-like)
+          platforms as attachments to this GitHub Release. They are statically
+          linked (on Linux), or link only to the platform's standard libraries
+          (on macOS).
