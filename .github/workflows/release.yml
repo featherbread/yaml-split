@@ -7,23 +7,22 @@ on:
 env:
   CARGO_TERM_COLOR: always
 jobs:
-  init-release:
+  build-about:
     runs-on: ubuntu-22.04
     steps:
-    - name: Create Release
-      uses: softprops/action-gh-release@v1
-      if: startsWith(github.ref, 'refs/tags/')
+    - name: Checkout
+      uses: actions/checkout@v3
+    - name: Download cargo-about
+      run: |
+        cargo install --locked cargo-about@0.6.2
+        cargo about generate about.hbs > LICENSES.html
+    - name: Upload LICENSES.html
+      uses: actions/upload-artifact@v4
       with:
-        body: |
-          **Note:** yaml-split release binaries are built automatically on a
-          _best-effort_ basis for a subset of the platforms on which yaml-split
-          is tested.
-
-          yaml-split is a silly little program I use to test GitHub Actions for
-          Rust projects. There is no formal changelog, nor any serious support.
+        name: LICENSES.html
+        path: LICENSES.html
 
   build-binaries-unix:
-    needs: init-release
     strategy:
       fail-fast: false
       matrix:
@@ -49,11 +48,24 @@ jobs:
     - name: Build
       run: |
         cargo build --release --target ${{ matrix.target }}
-        mkdir -p dist/yaml-split
-        cp LICENSE.txt target/${{ matrix.target }}/release/yaml-split dist/yaml-split/
-        tar -czvf yaml-split-${{ matrix.target }}.tar.gz -C dist .
-    - name: Upload
-      uses: softprops/action-gh-release@v1
-      if: startsWith(github.ref, 'refs/tags/')
+        gzip -c target/${{ matrix.target }}/release/yaml-split > yaml-split.gz
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v4
       with:
-        files: yaml-split-${{ matrix.target }}.tar.gz
+        name: yaml-split-${{ matrix.target }}
+        path: yaml-split.gz
+
+  # init-release:
+  #   runs-on: ubuntu-22.04
+  #   steps:
+  #   - name: Create Release
+  #     uses: softprops/action-gh-release@v1
+  #     if: startsWith(github.ref, 'refs/tags/')
+  #     with:
+  #       body: |
+  #         **Note:** yaml-split release binaries are built automatically on a
+  #         _best-effort_ basis for a subset of the platforms on which yaml-split
+  #         is tested.
+
+  #         yaml-split is a silly little program I use to test GitHub Actions for
+  #         Rust projects. There is no formal changelog, nor any serious support.
