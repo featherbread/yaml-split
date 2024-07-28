@@ -50,8 +50,8 @@ jobs:
         rustc --version
     - name: Build
       run: |
-        cargo build --release --target ${{ matrix.target }}
-        gzip -c target/${{ matrix.target }}/release/yaml-split > yaml-split.gz
+        cargo build --target ${{ matrix.target }} --profile release-opt
+        gzip -c target/${{ matrix.target }}/release-opt/yaml-split > yaml-split.gz
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
