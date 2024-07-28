@@ -23,7 +23,9 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: release-docs
-        path: LICENSES.html
+        path: |
+          doc/RELEASE.txt
+          LICENSES.html
 
   build-binaries-unix:
     strategy:
@@ -71,7 +73,8 @@ jobs:
         gunzip -v ./yaml-split-*/yaml-split.gz
         chmod -vv +x ./yaml-split-*/yaml-split
         for dir in ./yaml-split-*; do
-          cp -v release-docs/LICENSES.html $dir/
+          cp -v release-docs/doc/RELEASE.txt $dir/README.txt
+          cp -v release-docs/LICENSES.html $dir/LICENSES.html
           tar -czvf $dir.tar.gz $dir
         done
         sha256sum yaml-split-*.tar.gz > SHA256SUMS
