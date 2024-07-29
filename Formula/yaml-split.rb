@@ -39,8 +39,8 @@ class YamlSplit < Formula
   end
 
   def install
-    bin.install "yaml-split-*/yaml-split"
-    man1.install "yaml-split-*/yaml-split.1"
-    doc.install "yaml-split-*/LICENSES.html"
+    bin.install Dir["yaml-split-*/yaml-split"]
+    man1.install Dir["yaml-split-*/yaml-split.1"]
+    doc.install Dir["yaml-split-*/LICENSES.html"]
   end
 end
