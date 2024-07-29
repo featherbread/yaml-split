@@ -6,39 +6,41 @@
 
 class YamlSplit < Formula
   desc "Split a YAML stream into individual documents"
-  version "0.1.5"
+  version "0.1.8"
   license "MIT"
 
   on_macos do
     if Hardware::CPU.arm?
-      url "https://github.com/ahamlinman/yaml-split/releases/download/v0.1.5/yaml-split-aarch64-apple-darwin.tar.gz"
-      sha256 "21f069c276ed6bbcb69c4f72df43b34d8b15bfd6c84d765294d50d2c13091e93"
+      url "https://github.com/ahamlinman/yaml-split/releases/download/v0.1.8/yaml-split-aarch64-apple-darwin.tar.gz"
+      sha256 "717768bba25389b2ed275e7bb163a7772b5545584f2950a135efb784352c4c1f"
     end
 
     if Hardware::CPU.intel?
-      url "https://github.com/ahamlinman/yaml-split/releases/download/v0.1.5/yaml-split-x86_64-apple-darwin.tar.gz"
-      sha256 "e04f0291888490279612cf13e8efaca4d7d71240a461f7f8a3c348e432d00e9e"
+      url "https://github.com/ahamlinman/yaml-split/releases/download/v0.1.8/yaml-split-x86_64-apple-darwin.tar.gz"
+      sha256 "5e059569a82bf00da0abeddf981018ae7f0fec10e2f48b6f34721550ad9e904b"
     end
   end
 
   on_linux do
     if Hardware::CPU.intel?
-      url "https://github.com/ahamlinman/yaml-split/releases/download/v0.1.5/yaml-split-x86_64-unknown-linux-musl.tar.gz"
-      sha256 "61e14ed0da4c0ab2e01a05e77c17889961476672686682a76c31b788514d3015"
+      url "https://github.com/ahamlinman/yaml-split/releases/download/v0.1.8/yaml-split-x86_64-unknown-linux-musl.tar.gz"
+      sha256 "8b767adbe555445dc5f9d9611814c8931c9c7a275cbe9d1179fd2d7e6f90d110"
     end
 
     if Hardware::CPU.arm? && Hardware::CPU.is_64_bit?
-      url "https://github.com/ahamlinman/yaml-split/releases/download/v0.1.5/yaml-split-aarch64-unknown-linux-musl.tar.gz"
-      sha256 "607395123054b28f9c885a53bfb722e87e6efe116dfa684aebdfb8121c6dd229"
+      url "https://github.com/ahamlinman/yaml-split/releases/download/v0.1.8/yaml-split-aarch64-unknown-linux-musl.tar.gz"
+      sha256 "0e52a3ff1c3eeb9393fca805910043bdc3e003922664df4469f637d892636c19"
     end
 
     if Hardware::CPU.arm? && !Hardware::CPU.is_64_bit?
-      url "https://github.com/ahamlinman/yaml-split/releases/download/v0.1.5/yaml-split-armv7-unknown-linux-musleabihf.tar.gz"
-      sha256 "9f7244d4b730d8a1a777212c71b2d456cb439fa55cf92a67e8d8a998e65863c0"
+      url "https://github.com/ahamlinman/yaml-split/releases/download/v0.1.8/yaml-split-armv7-unknown-linux-musleabihf.tar.gz"
+      sha256 "9b736233f76dd4b234c0889804754753aef57e7c3ab3897b1e1f64265e8cfd29"
     end
   end
 
   def install
-    bin.install "yaml-split"
+    bin.install "yaml-split-*/yaml-split"
+    man1.install "yaml-split-*/yaml-split.1"
+    doc.install "yaml-split-*/LICENSES.html"
   end
 end
