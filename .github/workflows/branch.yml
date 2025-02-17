@@ -13,8 +13,6 @@ jobs:
     - name: Run Stuff
       run: |
         set -x
-        git config --global user.name "Alex Hamlin"
-        git config --global user.email github@alexhamlin.co
         git status
         git remote -v
         branch=make-$(date +%s)
