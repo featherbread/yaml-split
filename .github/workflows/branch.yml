@@ -15,8 +15,9 @@ jobs:
         git config --global user.email github@alexhamlin.co
         git status
         git remote -v
-        git checkout -b make-$(date +%s)
+        branch=make-$(date +%s)
+        git checkout -b $branch
         sed -i 's/version = "0.1.8"/version = "0.1.8-make-branch"/' Cargo.toml
         git add Cargo.toml
         git commit -m "Bump the version"
-        git push -u origin
+        git push --set-upstream origin $branch
