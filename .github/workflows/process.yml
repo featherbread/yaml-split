@@ -39,57 +39,11 @@ jobs:
 
   run-deep-tests:
     needs: create-release-branch
-    runs-on: ubuntu-24.04
-    strategy:
-      matrix:
-        runner: [ubuntu-24.04] #, macos-14, windows-2022]
-        toolchain: [stable, 1.70.0]
-    steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-      with:
-        ref: ${{ needs.create-release-branch.outputs.release_branch }}
-    - name: Setup Rust environment
-      run: |
-        rustup set profile minimal
-        rustup toolchain install ${{ matrix.toolchain }}
-        rustup default ${{ matrix.toolchain }}
-        rustc --version
-    - name: Run tests with cargo check and test
-      run: |
-        cargo check
-        cargo test
+    uses: ahamlinman/yaml-split/.github/workflows/deep.yml@${{ github.ref }}
 
   build-binaries:
     needs: create-release-branch
-    runs-on: ubuntu-24.04
-    strategy:
-      matrix:
-        target: [aarch64-unknown-linux-musl] #, armv7-unknown-linux-musleabihf, x86_64-unknown-linux-musl]
-    env:
-      RUSTFLAGS: -C linker=rust-lld
-    steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-      with:
-        ref: ${{ needs.create-release-branch.outputs.release_branch }}
-    - name: Download Toolchain
-      run: |
-        rustup set profile minimal
-        rustup toolchain install stable
-        rustup default stable
-        rustup target add ${{ matrix.target }}
-        rustc --version
-    - name: Build
-      run: |
-        bin="target/${{ matrix.target }}/release-opt/yaml-split"
-        make "$bin"
-        tar -czvf target.tar.gz "$bin"
-    - name: Upload Artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: target-${{ matrix.target }}
-        path: target.tar.gz
+    uses: ahamlinman/yaml-split/.github/workflows/release.yml@${{ github.ref }}
 
   create-tag-and-publish:
     needs:
