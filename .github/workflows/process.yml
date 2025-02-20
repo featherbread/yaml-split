@@ -27,7 +27,8 @@ jobs:
 
         git checkout -b "release/$NEW_VERSION"
         sed -i "s/version = \"${CURRENT_VERSION}\"/version = \"${RELEASE_VERSION}\"/" Cargo.toml
-        git add Cargo.toml
+        cargo check
+        git add Cargo.toml Cargo.lock
         git commit -m "Release ${RELEASE_VERSION}"
         git push --set-upstream origin "release/$RELEASE_VERSION"
     outputs:
