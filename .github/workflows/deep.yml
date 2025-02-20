@@ -3,17 +3,19 @@ name: yaml-split Deep Tests
 on: workflow_dispatch
 env:
   CARGO_TERM_COLOR: always
+  CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
 jobs:
-  stable-msrv-matrix:
+  stable-msrv-test:
     strategy:
+      fail-fast: false
       matrix:
         runner: [ubuntu-24.04, macos-14, windows-2022]
         toolchain: [stable, 1.70.0]
     runs-on: ${{ matrix.runner }}
     steps:
-    - name: Checkout
+    - name: git checkout
       uses: actions/checkout@v4
-    - name: Download Toolchain
+    - name: rustup toolchain install
       run: |
         rustup set profile minimal
         rustup toolchain install ${{ matrix.toolchain }}
