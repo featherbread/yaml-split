@@ -3,7 +3,7 @@ name: yaml-split Release Process
 
 on:
   push:
-    branches: ['start-release/v[0-9]+.[0-9]+.[0-9]+']
+    branches: ['start-release']
 
 env:
   CARGO_TERM_COLOR: always
@@ -16,14 +16,29 @@ jobs:
     steps:
     - name: git checkout
       uses: actions/checkout@v4
+      with:
+        filter: blob:none
+        fetch-depth: 0
     - name: Check Release Branch
       id: check-release
       run: |
-        release_version="$(cargo metadata --no-deps --format-version=1 | jq -r '.packages[0].version')"
-        [[ $release_version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || (echo "$release_version is not a release version" && exit 1)
+        set -x
 
+        release_version="$(cargo metadata --no-deps --format-version=1 | jq -r '.packages[0].version')"
         release_branch="${GITHUB_REF#refs/heads/}"
         release_tag="v${release_version}"
+        commit_title="$(git show --pretty=format:%s --no-patch)"
+
+        if [[ ! $release_version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          echo "$release_version is not a release version"
+          exit 1
+        elif [[ $commit_title != "Release $release_tag" ]]; then
+          echo "'$commit_title' is not a release commit title"
+          exit 1
+        elif [[ $(git rev-parse HEAD^) != $(git rev-parse refs/heads/main) ]]; then
+          echo "commit is not based directly on main"
+          exit 1
+        fi
 
         echo "release_version=$release_version" >> "$GITHUB_OUTPUT"
         echo "release_branch=$release_branch" >> "$GITHUB_OUTPUT"
