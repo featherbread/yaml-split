@@ -92,10 +92,10 @@ jobs:
         cargo check
         git add Cargo.toml Cargo.lock
         git commit -m "Bump to development version"
-    # - name: git push
-    #   run: |
-    #     release_tag="v${{ needs.create-release-branch.outputs.release_version }}"
-    #     git push origin main "$release_tag"
+    - name: git push
+      run: |
+        release_tag="v${{ needs.create-release-branch.outputs.release_version }}"
+        git push origin main "$release_tag"
 
   create-github-release:
     needs:
@@ -110,20 +110,20 @@ jobs:
       uses: actions/download-artifact@v4
       with:
         name: release
-    - name: ls
+    - name: List Artifacts
       run: ls -lR
-    # - name: Create Release
-    #   uses: softprops/action-gh-release@v2
-    #   with:
-    #     tag_name: v${{ needs.create-release-branch.outputs.release_version }}
-    #     files: |
-    #       yaml-split-*.tar.gz
-    #       SHA256SUMS
-    #     body: >-
-    #       yaml-split is a silly program I use to test GitHub Actions for Rust
-    #       projects. **It is not supported or maintained in any meaningful way.**
+    - name: Create Release
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: v${{ needs.create-release-branch.outputs.release_version }}
+        files: |
+          yaml-split-*.tar.gz
+          SHA256SUMS
+        body: >-
+          yaml-split is a silly program I use to test GitHub Actions for Rust
+          projects. **It is not supported or maintained in any meaningful way.**
 
 
-    #       Binary releases of yaml-split are available for Linux and macOS as
-    #       attachments to this GitHub Release. They are statically linked (on
-    #       Linux), or link only to the platform's standard libraries (on macOS).
+          Binary releases of yaml-split are available for Linux and macOS as
+          attachments to this GitHub Release. They are statically linked (on
+          Linux), or link only to the platform's standard libraries (on macOS).
