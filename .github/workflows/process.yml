@@ -1,0 +1,101 @@
+---
+name: yaml-split Release Process
+on:
+  workflow_dispatch: {}
+env:
+  CARGO_TERM_COLOR: always
+jobs:
+  create-release-branch:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    - name: Set up Git user configuration
+      run: |
+        git config --global user.name "github-actions[bot]"
+        git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+    - name: Create release branch
+      id: create-release
+      run: |
+        CURRENT_VERSION="$(cargo metadata --no-deps --format-version=1 | jq -r '.packages[0].version')"
+        [[ ! $CURRENT_VERSION = *-dev ]] && (echo "$CURRENT_VERSION is not a -dev version" && exit 1)
+
+        RELEASE_VERSION="${CURRENT_VERSION%-dev}"
+        echo "release_version=$RELEASE_VERSION" >> "$GITHUB_OUTPUT"
+
+        git checkout -b "release/$NEW_VERSION"
+        sed -i "s/version = \"${CURRENT_VERSION}\"/version = \"${RELEASE_VERSION}\"/" Cargo.toml
+        git add Cargo.toml
+        git commit -m "Release ${RELEASE_VERSION}"
+        git push --set-upstream origin "release/$RELEASE_VERSION"
+    outputs:
+      release_version: ${{ steps.create-release.outputs.release_version }}
+
+  run-deep-tests:
+    needs: create-release-branch
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        runner: [ubuntu-24.04] #, macos-14, windows-2022]
+        toolchain: [stable, 1.70.0]
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        ref: release/${{ needs.create-release-branch.outputs.release_version }}
+    - name: Setup Rust environment
+      run: |
+        rustup set profile minimal
+        rustup toolchain install ${{ matrix.toolchain }}
+        rustup default ${{ matrix.toolchain }}
+        rustc --version
+    - name: Run tests with cargo check and test
+      run: |
+        cargo check
+        cargo test
+
+  build-binaries:
+    needs: create-release-branch
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        target: [aarch64-unknown-linux-musl] #, armv7-unknown-linux-musleabihf, x86_64-unknown-linux-musl]
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        ref: release/${{ needs.create-release-branch.outputs.release_version }}
+    - name: Download toolchain and build binaries
+      run: |
+        rustup set profile minimal
+        rustup toolchain install stable
+        rustup default stable
+        rustup target add ${{ matrix.target }}
+        rustc --version
+        bin="target/${{ matrix.target }}/release-opt/yaml-split"
+        make "$bin"
+    - name: Upload binaries as artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: binaries-${{ matrix.target }}
+        path: target/${{ matrix.target }}/release-opt/yaml-split
+
+  create-tag-and-publish:
+    needs:
+    - create-release-branch
+    - run-deep-tests
+    - build-binaries
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      packages: write
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        ref: release/${{ needs.create-release-branch.outputs.release_version }}
+    - name: How are we?
+      run: |
+          echo "It works!"
