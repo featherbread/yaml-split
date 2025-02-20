@@ -32,7 +32,7 @@ jobs:
         echo "release_branch=$release_branch" >> "$GITHUB_OUTPUT"
         echo "release_tag=$release_tag" >> "$GITHUB_OUTPUT"
 
-        git checkout -b "release/$release_version"
+        git checkout -b "$release_branch"
         sed -i "s/version = \"${current_version}\"/version = \"${release_version}\"/" Cargo.toml
         cargo check
         git add Cargo.toml Cargo.lock
