@@ -80,7 +80,7 @@ jobs:
         release_version="${{ needs.create-release-branch.outputs.release_version }}"
         release_prefix=${release_version%.*}
         release_patch=${release_version##*.}
-        release_patch_bump=$(( release_version + 1 ))
+        release_patch_bump=$(( release_patch + 1 ))
         dev_version="${release_prefix}.${release_patch_bump}-dev"
 
         git checkout main
