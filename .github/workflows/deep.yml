@@ -1,7 +1,12 @@
 ---
 name: yaml-split Deep Tests
 on:
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      ref:
+        required: true
+        type: string
+        default: main
   workflow_call:
     inputs:
       ref:
@@ -21,6 +26,8 @@ jobs:
     steps:
     - name: git checkout
       uses: actions/checkout@v4
+      with:
+        ref: ${{ inputs.ref }}
     - name: rustup toolchain install
       run: |
         rustup set profile minimal
@@ -36,6 +43,8 @@ jobs:
     steps:
     - name: git checkout
       uses: actions/checkout@v4
+      with:
+        ref: ${{ inputs.ref }}
     - name: rustup toolchain install
       run: |
         rustup set profile minimal
