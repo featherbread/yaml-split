@@ -29,7 +29,7 @@ jobs:
         release_tag="v${release_version}"
         commit_title="$(git show --pretty=format:%s --no-patch)"
         parent_sha="$(git rev-parse HEAD^)"
-        main_sha="$(git rev-parse main)"
+        main_sha="$(git rev-parse refs/heads/main)"
 
         if [[ ! $release_version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
           echo "$release_version is not a release version"
