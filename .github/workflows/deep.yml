@@ -23,31 +23,31 @@ jobs:
         - 1.70.0
     runs-on: ${{ matrix.runner }}
     steps:
-    - name: git checkout
+    - name: Checkout
       uses: actions/checkout@v4
-    - name: rustup toolchain install
+    - name: Download Toolchain
       run: |
         rustup set profile minimal
         rustup toolchain install ${{ matrix.toolchain }}
         rustup default ${{ matrix.toolchain }}
         rustc --version
-    - name: cargo check
+    - name: Check
       run: cargo check
-    - name: cargo test
+    - name: Test
       run: cargo test
 
   # linux-miri-test:
   #   runs-on: ubuntu-24.04
   #   steps:
-  #   - name: git checkout
+  #   - name: Checkout
   #     uses: actions/checkout@v4
-  #   - name: rustup toolchain install
+  #   - name: Download Toolchain
   #     run: |
   #       rustup set profile minimal
   #       rustup toolchain install nightly --component miri --allow-downgrade
   #       rustup default nightly
   #       rustc --version
-  #   - name: download nextest
+  #   - name: Download Nextest
   #     run: curl -LsSf https://get.nexte.st/0.9/linux | tar zxf - -C ${CARGO_HOME:-~/.cargo}/bin
-  #   - name: cargo miri test
+  #   - name: Test in Miri
   #     run: cargo miri nextest run -j num-cpus
