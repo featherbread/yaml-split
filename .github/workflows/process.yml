@@ -40,10 +40,14 @@ jobs:
   run-deep-tests:
     needs: create-release-branch
     uses: ./.github/workflows/deep.yml
+    with:
+      ref: ${{ needs.create-release-branch.outputs.release_branch }}
 
   build-binaries:
     needs: create-release-branch
     uses: ./.github/workflows/release.yml
+    with:
+      ref: ${{ needs.create-release-branch.outputs.release_branch }}
 
   create-tag-and-publish:
     needs:

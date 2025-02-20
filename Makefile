@@ -8,7 +8,7 @@ dist/yaml-split-%: doc/RELEASE-README.txt doc/yaml-split.1 doc/LICENSES.html tar
 	mkdir -p $@
 	cp $^ $@/
 
-doc/LICENSES.html: Cargo.lock about.hbs
+doc/LICENSES.html: Cargo.lock about.toml about.hbs
 	cargo about generate about.hbs > $@
 
 target/%/release-opt/yaml-split:
