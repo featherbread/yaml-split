@@ -96,7 +96,6 @@ jobs:
         done
         (cd dist && sha256sum yaml-split-*.tar.gz > SHA256SUMS)
     - name: Upload Release Artifacts
-      if: startsWith(github.ref, 'refs/heads/')
       uses: actions/upload-artifact@v4
       with:
         name: release

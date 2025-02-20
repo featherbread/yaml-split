@@ -13,13 +13,13 @@ jobs:
     permissions:
       contents: write
     steps:
-    - name: Checkout repository
+    - name: git checkout
       uses: actions/checkout@v4
-    - name: Set up Git user configuration
+    - name: git config
       run: |
         git config --global user.name "github-actions[bot]"
         git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
-    - name: Create release branch
+    - name: Create Release Branch
       id: create-release
       run: |
         CURRENT_VERSION="$(cargo metadata --no-deps --format-version=1 | jq -r '.packages[0].version')"
@@ -54,7 +54,7 @@ jobs:
     permissions:
       contents: write
 
-  create-tag-and-publish:
+  push-release-tag:
     needs:
     - create-release-branch
     - run-deep-tests
@@ -62,34 +62,62 @@ jobs:
     runs-on: ubuntu-24.04
     permissions:
       contents: write
-      packages: write
     steps:
-    - name: Checkout repository
+    - name: git checkout
       uses: actions/checkout@v4
       with:
         ref: ${{ needs.create-release-branch.outputs.release_branch }}
-    - name: How are we?
+    - name: git tag
       run: |
-          echo "It works!"
+        release_tag="v${{ needs.create-release-branch.outputs.release_version }}"
+        git tag -a -m "$release_tag" "$release_tag"
+    - name: Bump to Development Version
+      run: |
+        release_version="${{ needs.create-release-branch.outputs.release_version }}"
+        release_prefix=${release_version%.*}
+        release_patch=${release_version##*.}
+        release_patch_bump=$(( release_version + 1 ))
+        dev_version="${release_prefix}.${release_patch_bump}-dev"
 
-  # create-release:
-  #   needs: [build-doc, build-binaries-unix]
-  #   runs-on: ubuntu-24.04
-  #   permissions:
-  #     contents: write
-  #   steps:
-  #   - name: Create Release
-  #     uses: softprops/action-gh-release@v2
-  #     if: startsWith(github.ref, 'refs/tags/')
-  #     with:
-  #       files: |
-  #         dist/yaml-split-*.tar.gz
-  #         dist/SHA256SUMS
-  #       body: >-
-  #         yaml-split is a silly program I use to test GitHub Actions for Rust
-  #         projects. **It is not supported or maintained in any meaningful way.**
+        git checkout main
+        git merge --ff-only ${{ needs.create-release-branch.outputs.release_branch }}
+
+        sed -i "s/version = \"${release_version}\"/version = \"${dev_version}\"/" Cargo.toml
+        cargo check
+        git add Cargo.toml Cargo.lock
+        git commit -m "Bump to development version"
+    # - name: git push
+    #   run: |
+    #     release_tag="v${{ needs.create-release-branch.outputs.release_version }}"
+    #     git push origin main "$release_tag"
+
+  create-github-release:
+    needs:
+    - create-release-branch
+    - build-archives
+    - push-release-tag
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+    - name: Download Artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: release
+    - name: ls
+      run: ls -lR
+    # - name: Create Release
+    #   uses: softprops/action-gh-release@v2
+    #   with:
+    #     tag_name: v${{ needs.create-release-branch.outputs.release_version }}
+    #     files: |
+    #       yaml-split-*.tar.gz
+    #       SHA256SUMS
+    #     body: >-
+    #       yaml-split is a silly program I use to test GitHub Actions for Rust
+    #       projects. **It is not supported or maintained in any meaningful way.**
 
 
-  #         Binary releases of yaml-split are available for Linux and macOS as
-  #         attachments to this GitHub Release. They are statically linked (on
-  #         Linux), or link only to the platform's standard libraries (on macOS).
+    #       Binary releases of yaml-split are available for Linux and macOS as
+    #       attachments to this GitHub Release. They are statically linked (on
+    #       Linux), or link only to the platform's standard libraries (on macOS).
