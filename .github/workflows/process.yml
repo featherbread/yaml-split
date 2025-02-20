@@ -58,7 +58,7 @@ jobs:
     permissions:
       contents: write
 
-  push-release-tag:
+  merge-release:
     needs:
     - check-release-branch
     - run-deep-tests
@@ -72,15 +72,18 @@ jobs:
       with:
         filter: blob:none
         fetch-depth: 0
-    - name: git config
+    - name: Merge Release
       run: |
-        git config --global user.name "github-actions[bot]"
-        git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
-    - name: Merge and Push Release Commit
-      run: |
+        set -x
+
         release_branch="${{ needs.check-release-branch.outputs.release_branch }}"
         release_tag="${{ needs.check-release-branch.outputs.release_tag }}"
+
+        git config --global user.name "github-actions[bot]"
+        git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
         git tag -a -m "$release_tag" "$release_tag"
+
         git checkout main
         git merge --ff-only "$release_branch"
         git push origin main "$release_tag" :"$release_branch"
@@ -89,7 +92,7 @@ jobs:
     needs:
     - check-release-branch
     - build-archives
-    - push-release-tag
+    - merge-release
     runs-on: ubuntu-24.04
     permissions:
       contents: write
