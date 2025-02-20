@@ -2,64 +2,50 @@
 name: yaml-split Release Process
 
 on:
-  workflow_dispatch: {}
+  push:
+    branches: ['start-release/v[0-9]+.[0-9]+.[0-9]+']
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  create-release-branch:
+  check-release-branch:
     runs-on: ubuntu-24.04
     permissions:
       contents: write
     steps:
     - name: git checkout
       uses: actions/checkout@v4
-    - name: git config
+    - name: Check Release Branch
+      id: check-release
       run: |
-        git config --global user.name "github-actions[bot]"
-        git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
-    - name: Create Release Branch
-      id: create-release
-      run: |
-        current_version="$(cargo metadata --no-deps --format-version=1 | jq -r '.packages[0].version')"
-        [[ ! $current_version = *-dev ]] && (echo "$current_version is not a -dev version" && exit 1)
+        release_version="$(cargo metadata --no-deps --format-version=1 | jq -r '.packages[0].version')"
+        [[ $release_version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || (echo "$release_version is not a release version" && exit 1)
 
-        release_version="${current_version%-dev}"
-        release_branch="release/v${release_version}"
+        release_branch="${GITHUB_REF#refs/heads/}"
         release_tag="v${release_version}"
+
         echo "release_version=$release_version" >> "$GITHUB_OUTPUT"
         echo "release_branch=$release_branch" >> "$GITHUB_OUTPUT"
         echo "release_tag=$release_tag" >> "$GITHUB_OUTPUT"
-
-        git checkout -b "$release_branch"
-        sed -i "s/version = \"${current_version}\"/version = \"${release_version}\"/" Cargo.toml
-        cargo check
-        git add Cargo.toml Cargo.lock
-        git commit -m "Release $release_tag"
-        git push --set-upstream origin "$release_branch"
     outputs:
-      release_version: ${{ steps.create-release.outputs.release_version }}
-      release_branch: ${{ steps.create-release.outputs.release_branch }}
-      release_tag: ${{ steps.create-release.outputs.release_tag }}
+      release_version: ${{ steps.check-release.outputs.release_version }}
+      release_branch: ${{ steps.check-release.outputs.release_branch }}
+      release_tag: ${{ steps.check-release.outputs.release_tag }}
 
   run-deep-tests:
-    needs: create-release-branch
+    needs: check-release-branch
     uses: ./.github/workflows/deep.yml
-    with:
-      ref: ${{ needs.create-release-branch.outputs.release_branch }}
 
   build-archives:
-    needs: create-release-branch
+    needs: check-release-branch
     uses: ./.github/workflows/archives.yml
-    with:
-      ref: ${{ needs.create-release-branch.outputs.release_branch }}
     permissions:
       contents: write
 
   push-release-tag:
     needs:
-    - create-release-branch
+    - check-release-branch
     - run-deep-tests
     - build-archives
     runs-on: ubuntu-24.04
@@ -69,7 +55,6 @@ jobs:
     - name: git checkout
       uses: actions/checkout@v4
       with:
-        ref: ${{ needs.create-release-branch.outputs.release_branch }}
         filter: blob:none
         fetch-depth: 0
     - name: git config
@@ -78,12 +63,12 @@ jobs:
         git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
     - name: git tag
       run: |
-        release_tag="${{ needs.create-release-branch.outputs.release_tag }}"
+        release_tag="${{ needs.check-release-branch.outputs.release_tag }}"
         git tag -a -m "$release_tag" "$release_tag"
     - name: Bump to Development Version
       run: |
-        release_version="${{ needs.create-release-branch.outputs.release_version }}"
-        release_branch="${{ needs.create-release-branch.outputs.release_branch }}"
+        release_version="${{ needs.check-release-branch.outputs.release_version }}"
+        release_branch="${{ needs.check-release-branch.outputs.release_branch }}"
 
         release_prefix=${release_version%.*}
         release_patch=${release_version##*.}
@@ -99,13 +84,13 @@ jobs:
         git commit -m "Bump to development version"
     - name: git push
       run: |
-        release_tag="${{ needs.create-release-branch.outputs.release_tag }}"
-        release_branch="${{ needs.create-release-branch.outputs.release_branch }}"
+        release_tag="${{ needs.check-release-branch.outputs.release_tag }}"
+        release_branch="${{ needs.check-release-branch.outputs.release_branch }}"
         git push origin main "$release_tag" :"$release_branch"
 
   create-github-release:
     needs:
-    - create-release-branch
+    - check-release-branch
     - build-archives
     - push-release-tag
     runs-on: ubuntu-24.04
@@ -121,7 +106,7 @@ jobs:
     - name: Create Release
       uses: softprops/action-gh-release@v2
       with:
-        tag_name: ${{ needs.create-release-branch.outputs.release_tag }}
+        tag_name: ${{ needs.check-release-branch.outputs.release_tag }}
         files: |
           yaml-split-*.tar.gz
           SHA256SUMS
