@@ -28,6 +28,8 @@ jobs:
         release_branch="${GITHUB_REF#refs/heads/}"
         release_tag="v${release_version}"
         commit_title="$(git show --pretty=format:%s --no-patch)"
+        parent_sha="$(git rev-parse HEAD^)"
+        main_sha="$(git rev-parse main)"
 
         if [[ ! $release_version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
           echo "$release_version is not a release version"
@@ -35,7 +37,7 @@ jobs:
         elif [[ $commit_title != "Release $release_tag" ]]; then
           echo "'$commit_title' is not a release commit title"
           exit 1
-        elif [[ $(git rev-parse HEAD^) != $(git rev-parse main) ]]; then
+        elif [[ $parent_sha != $main_sha ]]; then
           echo "commit is not based directly on main"
           exit 1
         fi
