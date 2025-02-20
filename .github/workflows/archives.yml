@@ -1,5 +1,5 @@
 ---
-name: yaml-split Release
+name: yaml-split Release Archives
 
 on:
   workflow_call: {}
