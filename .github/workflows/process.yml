@@ -76,31 +76,13 @@ jobs:
       run: |
         git config --global user.name "github-actions[bot]"
         git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
-    - name: git tag
+    - name: Merge and Push Release Commit
       run: |
+        release_branch="${{ needs.check-release-branch.outputs.release_branch }}"
         release_tag="${{ needs.check-release-branch.outputs.release_tag }}"
         git tag -a -m "$release_tag" "$release_tag"
-    - name: Bump to Development Version
-      run: |
-        release_version="${{ needs.check-release-branch.outputs.release_version }}"
-        release_branch="${{ needs.check-release-branch.outputs.release_branch }}"
-
-        release_prefix=${release_version%.*}
-        release_patch=${release_version##*.}
-        release_patch_bump=$(( release_patch + 1 ))
-        dev_version="${release_prefix}.${release_patch_bump}-dev"
-
         git checkout main
         git merge --ff-only "$release_branch"
-
-        sed -i "s/version = \"${release_version}\"/version = \"${dev_version}\"/" Cargo.toml
-        cargo check
-        git add Cargo.toml Cargo.lock
-        git commit -m "Bump to development version"
-    - name: git push
-      run: |
-        release_tag="${{ needs.check-release-branch.outputs.release_tag }}"
-        release_branch="${{ needs.check-release-branch.outputs.release_branch }}"
         git push origin main "$release_tag" :"$release_branch"
 
   create-github-release:
