@@ -22,23 +22,26 @@ jobs:
     - name: Create Release Branch
       id: create-release
       run: |
-        CURRENT_VERSION="$(cargo metadata --no-deps --format-version=1 | jq -r '.packages[0].version')"
-        [[ ! $CURRENT_VERSION = *-dev ]] && (echo "$CURRENT_VERSION is not a -dev version" && exit 1)
+        current_version="$(cargo metadata --no-deps --format-version=1 | jq -r '.packages[0].version')"
+        [[ ! $current_version = *-dev ]] && (echo "$current_version is not a -dev version" && exit 1)
 
-        RELEASE_VERSION="${CURRENT_VERSION%-dev}"
-        RELEASE_BRANCH="release/${RELEASE_VERSION}"
-        echo "release_version=$RELEASE_VERSION" >> "$GITHUB_OUTPUT"
-        echo "release_branch=$RELEASE_BRANCH" >> "$GITHUB_OUTPUT"
+        release_version="${current_version%-dev}"
+        release_branch="release/v${release_version}"
+        release_tag="v${release_version}"
+        echo "release_version=$release_version" >> "$GITHUB_OUTPUT"
+        echo "release_branch=$release_branch" >> "$GITHUB_OUTPUT"
+        echo "release_tag=$release_tag" >> "$GITHUB_OUTPUT"
 
-        git checkout -b "release/$RELEASE_VERSION"
-        sed -i "s/version = \"${CURRENT_VERSION}\"/version = \"${RELEASE_VERSION}\"/" Cargo.toml
+        git checkout -b "release/$release_version"
+        sed -i "s/version = \"${current_version}\"/version = \"${release_version}\"/" Cargo.toml
         cargo check
         git add Cargo.toml Cargo.lock
-        git commit -m "Release ${RELEASE_VERSION}"
-        git push --set-upstream origin "release/$RELEASE_VERSION"
+        git commit -m "Release $release_tag"
+        git push --set-upstream origin "$release_branch"
     outputs:
       release_version: ${{ steps.create-release.outputs.release_version }}
       release_branch: ${{ steps.create-release.outputs.release_branch }}
+      release_tag: ${{ steps.create-release.outputs.release_branch }}
 
   run-deep-tests:
     needs: create-release-branch
@@ -75,18 +78,20 @@ jobs:
         git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
     - name: git tag
       run: |
-        release_tag="v${{ needs.create-release-branch.outputs.release_version }}"
+        release_tag="${{ needs.create-release-branch.outputs.release_tag }}"
         git tag -a -m "$release_tag" "$release_tag"
     - name: Bump to Development Version
       run: |
         release_version="${{ needs.create-release-branch.outputs.release_version }}"
+        release_branch="${{ needs.create-release-branch.outputs.release_branch }}"
+
         release_prefix=${release_version%.*}
         release_patch=${release_version##*.}
         release_patch_bump=$(( release_patch + 1 ))
         dev_version="${release_prefix}.${release_patch_bump}-dev"
 
         git checkout main
-        git merge --ff-only ${{ needs.create-release-branch.outputs.release_branch }}
+        git merge --ff-only "$release_branch"
 
         sed -i "s/version = \"${release_version}\"/version = \"${dev_version}\"/" Cargo.toml
         cargo check
@@ -94,8 +99,9 @@ jobs:
         git commit -m "Bump to development version"
     - name: git push
       run: |
-        release_tag="v${{ needs.create-release-branch.outputs.release_version }}"
-        git push origin main "$release_tag"
+        release_tag="${{ needs.create-release-branch.outputs.release_tag }}"
+        release_branch="${{ needs.create-release-branch.outputs.release_branch }}"
+        git push origin main "$release_tag" :"$release_branch"
 
   create-github-release:
     needs:
@@ -115,7 +121,7 @@ jobs:
     - name: Create Release
       uses: softprops/action-gh-release@v2
       with:
-        tag_name: v${{ needs.create-release-branch.outputs.release_version }}
+        tag_name: ${{ needs.create-release-branch.outputs.release_tag }}
         files: |
           yaml-split-*.tar.gz
           SHA256SUMS
