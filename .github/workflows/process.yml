@@ -51,6 +51,8 @@ jobs:
     uses: ./.github/workflows/archives.yml
     with:
       ref: ${{ needs.create-release-branch.outputs.release_branch }}
+    permissions:
+      contents: write
 
   create-tag-and-publish:
     needs:
