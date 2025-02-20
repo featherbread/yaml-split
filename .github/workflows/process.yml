@@ -35,7 +35,7 @@ jobs:
         elif [[ $commit_title != "Release $release_tag" ]]; then
           echo "'$commit_title' is not a release commit title"
           exit 1
-        elif [[ $(git rev-parse HEAD^) != $(git rev-parse refs/heads/main) ]]; then
+        elif [[ $(git rev-parse HEAD^) != $(git rev-parse main) ]]; then
           echo "commit is not based directly on main"
           exit 1
         fi
