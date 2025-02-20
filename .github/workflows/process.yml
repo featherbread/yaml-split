@@ -41,7 +41,7 @@ jobs:
     outputs:
       release_version: ${{ steps.create-release.outputs.release_version }}
       release_branch: ${{ steps.create-release.outputs.release_branch }}
-      release_tag: ${{ steps.create-release.outputs.release_branch }}
+      release_tag: ${{ steps.create-release.outputs.release_tag }}
 
   run-deep-tests:
     needs: create-release-branch
