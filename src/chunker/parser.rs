@@ -77,9 +77,9 @@ where
 		// SAFETY: Again, we assume libyaml is implemented correctly. We know
 		// the parser is initialized because we didn't panic above.
 		unsafe {
-			yaml_parser_set_encoding(parser.as_mut(), YAML_UTF8_ENCODING);
+			yaml_parser_set_encoding(&mut *parser, YAML_UTF8_ENCODING);
 			yaml_parser_set_input(
-				parser.as_mut(),
+				&mut *parser,
 				Self::read_handler,
 				read_state.cast::<c_void>(),
 			);
@@ -103,7 +103,7 @@ where
 	}
 
 	pub(super) fn next_event(&mut self) -> Result<Event, io::Error> {
-		Event::parse_next(self.parser.as_mut()).map_err(|err| {
+		Event::parse_next(&mut self.parser).map_err(|err| {
 			self.read_state_mut()
 				.error
 				.take()
@@ -115,7 +115,7 @@ where
 	///
 	/// # Safety
 	///
-	/// The data pointer provided to yaml_parser_set_input must be a valid
+	/// The data pointer provided to `yaml_parser_set_input` must be a valid
 	/// `ReadState<R>` pointer.
 	unsafe fn read_handler(
 		read_state: *mut c_void,
@@ -126,23 +126,21 @@ where
 		const READ_SUCCESS: i32 = 1;
 		const READ_FAILURE: i32 = 0;
 
-		// Let's knock out this particular class of UB across the board.
+		// These should never fail, but let's be extra safe. Ideally we would
+		// panic in cases as degenerate as this, but I want to model a scenario
+		// where we're using the true libyaml through FFI and can't unwind.
 		if read_state.is_null() || buffer.is_null() || size_read.is_null() {
 			return READ_FAILURE;
 		}
+		let Ok(buffer_size) = usize::try_from(buffer_size) else {
+			return READ_FAILURE;
+		};
 
 		// SAFETY: self.read_state_mut() is the only other dereference of the
 		// read_state; see its comment explaining how it's mutually exclusive
 		// with running the parser. The lifetime here lasts through the end of
 		// this function, i.e. before the parser is finished.
 		let read_state = unsafe { &mut *read_state.cast::<ReadState<R>>() };
-
-		// We assume libyaml is implemented correctly, and won't pass a buffer
-		// size larger than can exist in memory. (Since unsafe_libyaml is
-		// actually Rust we could use usize::try_from and unwrap, but panicking
-		// wouldn't be okay in the true FFI scenario I want to model.)
-		#[allow(clippy::cast_possible_truncation)]
-		let buffer_size = buffer_size as usize;
 
 		// libyaml is not guaranteed to initialize its buffer prior to the first
 		// read. It would be instant Undefined Behavior to slice that buffer,
