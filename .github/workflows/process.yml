@@ -39,11 +39,11 @@ jobs:
 
   run-deep-tests:
     needs: create-release-branch
-    uses: ahamlinman/yaml-split/.github/workflows/deep.yml@${{ github.ref }}
+    uses: ./.github/workflows/deep.yml
 
   build-binaries:
     needs: create-release-branch
-    uses: ahamlinman/yaml-split/.github/workflows/release.yml@${{ github.ref }}
+    uses: ./.github/workflows/release.yml
 
   create-tag-and-publish:
     needs:
