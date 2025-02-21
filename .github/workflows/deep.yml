@@ -10,6 +10,20 @@ env:
   CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
 
 jobs:
+  cargo-publish-dry-run:
+    runs-on: ubuntu-24.04
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+    - name: Download Toolchain
+      run: |
+        rustup set profile minimal
+        rustup toolchain install stable
+        rustup default stable
+        rustc --version
+    - name: Try Publishing
+      run: cargo publish --dry-run
+
   stable-msrv-test:
     strategy:
       fail-fast: false
