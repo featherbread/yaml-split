@@ -86,7 +86,13 @@ jobs:
       with:
         filter: blob:none
         fetch-depth: 0
+    - name: Import Signing Key
+      run: gpg --batch --import <<<"$GPG_PRIVATE_KEY"
+      env:
+        GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
     - name: Merge Release
+      env: 
+        GPG_KEY_ID: ${{ vars.GPG_KEY_ID }}
       run: |
         set -x
 
@@ -96,7 +102,7 @@ jobs:
         git config --global user.name "github-actions[bot]"
         git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-        git tag -a -m "$release_tag" "$release_tag"
+        git tag -asu "$GPG_KEY_ID" -m "$release_tag" "$release_tag"
 
         git checkout main
         git merge --ff-only "$release_branch"
