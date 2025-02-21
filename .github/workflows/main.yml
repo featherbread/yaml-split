@@ -1,11 +1,14 @@
 ---
 name: yaml-split main
+
 on:
   workflow_dispatch: {}
   # push:
   #   branches: [main]
+
 env:
   CARGO_TERM_COLOR: always
+
 jobs:
   test-lint-linux-stable:
     runs-on: ubuntu-24.04
@@ -18,7 +21,7 @@ jobs:
         rustup toolchain install stable --component clippy
         rustup default stable
         rustc --version
-    - name: cargo test
+    - name: Test
       run: cargo test
-    - name: cargo clippy
+    - name: Clippy
       run: cargo clippy
