@@ -14,13 +14,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        runner:
-        - ubuntu-24.04
-        # - macos-14
-        # - windows-2022
-        toolchain:
-        - stable
-        - 1.70.0
+        runner: [ubuntu-24.04, macos-14, windows-2022]
+        toolchain: [stable, '1.70.0']
     runs-on: ${{ matrix.runner }}
     steps:
     - name: Checkout
@@ -36,18 +31,18 @@ jobs:
     - name: Test
       run: cargo test
 
-  # linux-miri-test:
-  #   runs-on: ubuntu-24.04
-  #   steps:
-  #   - name: Checkout
-  #     uses: actions/checkout@v4
-  #   - name: Download Toolchain
-  #     run: |
-  #       rustup set profile minimal
-  #       rustup toolchain install nightly --component miri --allow-downgrade
-  #       rustup default nightly
-  #       rustc --version
-  #   - name: Download Nextest
-  #     run: curl -LsSf https://get.nexte.st/0.9/linux | tar zxf - -C ${CARGO_HOME:-~/.cargo}/bin
-  #   - name: Test in Miri
-  #     run: cargo miri nextest run -j num-cpus
+  linux-miri-test:
+    runs-on: ubuntu-24.04
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+    - name: Download Toolchain
+      run: |
+        rustup set profile minimal
+        rustup toolchain install nightly --component miri --allow-downgrade
+        rustup default nightly
+        rustc --version
+    - name: Download Nextest
+      run: curl -LsSf https://get.nexte.st/0.9/linux | tar zxf - -C ${CARGO_HOME:-~/.cargo}/bin
+    - name: Test in Miri
+      run: cargo miri nextest run -j num-cpus
