@@ -1,5 +1,5 @@
 ---
-name: yaml-split Release Process
+name: yaml-split Release
 
 on:
   push:
