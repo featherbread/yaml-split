@@ -71,7 +71,7 @@ jobs:
         filter: blob:none
         fetch-depth: 0
     - name: Import Signing Key
-      run: gpg --batch --import <<<"$GPG_PRIVATE_KEY"
+      run: gpg --batch --import <<< "$GPG_PRIVATE_KEY"
       env:
         GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
     - name: Merge Release
@@ -89,6 +89,7 @@ jobs:
 
         git checkout main
         git merge --ff-only "$release_branch"
+
         git push origin main "$release_tag" :"$release_branch"
 
   create-github-release:

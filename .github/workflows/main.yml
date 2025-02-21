@@ -1,5 +1,5 @@
 ---
-name: yaml-split main
+name: yaml-split Main Tests
 
 on:
   workflow_dispatch: {}
