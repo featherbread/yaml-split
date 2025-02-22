@@ -65,7 +65,9 @@ jobs:
         path: target.tar.gz
 
   assemble-archives:
-    needs: [build-doc, build-binaries-unix]
+    needs:
+    - build-doc
+    - build-binaries-unix
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -90,6 +92,7 @@ jobs:
         path: |
           dist/yaml-split-*.tar.gz
           dist/SHA256SUMS
-    - uses: actions/attest-build-provenance@v2
+    - name: Create GitHub Attestation
+      uses: actions/attest-build-provenance@v2
       with:
         subject-checksums: dist/SHA256SUMS
