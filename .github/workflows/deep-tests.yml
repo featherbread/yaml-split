@@ -1,5 +1,5 @@
 ---
-name: yaml-split Deep Tests
+name: Deep Tests
 
 on:
   workflow_call: {}

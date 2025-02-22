@@ -1,9 +1,9 @@
 ---
-name: yaml-split Release
+name: Release Process
 
 on:
   push:
-    branches: ['start-release']
+    branches: [start-release]
 
 env:
   CARGO_TERM_COLOR: always
@@ -48,11 +48,11 @@ jobs:
 
   run-deep-tests:
     needs: check-release-branch
-    uses: ./.github/workflows/deep.yml
+    uses: ./.github/workflows/deep-tests.yml
 
   build-archives:
     needs: check-release-branch
-    uses: ./.github/workflows/archives.yml
+    uses: ./.github/workflows/build-release-archives.yml
     permissions:
       contents: write
 
