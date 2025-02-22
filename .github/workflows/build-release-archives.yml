@@ -69,6 +69,8 @@ jobs:
     runs-on: ubuntu-24.04
     permissions:
       contents: write
+      id-token: write
+      attestations: write
     steps:
     - name: Checkout
       uses: actions/checkout@v4
@@ -88,3 +90,6 @@ jobs:
         path: |
           dist/yaml-split-*.tar.gz
           dist/SHA256SUMS
+    - uses: actions/attest-build-provenance@v2
+      with:
+        subject-checksums: dist/SHA256SUMS
