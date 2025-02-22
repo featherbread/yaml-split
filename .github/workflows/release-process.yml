@@ -96,7 +96,8 @@ jobs:
     # outside of the GitHub workflow.
     #
     # THIS STEP IS THE POINT OF NO RETURN.
-    # IT IS THE ATOMIC MOMENT AT WHICH THE RELEASE OCCURS AND CANNOT BE REVOKED.
+    # IT IS THE ATOMIC MOMENT AT WHICH THE RELEASE OCCURS,
+    # AFTER WHICH IT CANNOT BE REVOKED.
     #
     # Any failures after this point MUST be possible to recover from manually.
     # For example, the GitHub release can be cut by hand using archives uploaded
