@@ -105,7 +105,7 @@ jobs:
     - name: Push Release
       if: ${{ github.ref == 'refs/heads/start-release' }}
       run: |
-        git push origin main "$RELEASE_TAG" :"$RELEASE_BRANCH"
+        git push --atomic origin main "$RELEASE_TAG" :"$RELEASE_BRANCH"
 
   create-github-release:
     if: ${{ github.ref == 'refs/heads/start-release' }}
