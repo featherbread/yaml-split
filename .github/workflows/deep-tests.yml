@@ -24,12 +24,31 @@ jobs:
     - name: Try Publishing
       run: cargo publish --dry-run
 
+  read-msrv:
+    runs-on: ubuntu-24.04
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+    - name: Read MSRV
+      id: read-msrv
+      run: |
+        msrv="$(cargo metadata --no-deps --format-version=1 | jq -r '.packages[0].rust_version')"
+        echo "msrv=$msrv" >> "$GITHUB_OUTPUT"
+    outputs:
+      msrv: ${{ steps.read-msrv.outputs.msrv }}
+
   stable-msrv-test:
+    needs: read-msrv
     strategy:
       fail-fast: false
       matrix:
-        runner: [ubuntu-24.04, macos-14, windows-2022]
-        toolchain: [stable, '1.70.0']
+        runner:
+        - ubuntu-24.04
+        - macos-14
+        - windows-2022
+        toolchain:
+        - stable
+        - ${{ needs.read-msrv.outputs.msrv }}
     runs-on: ${{ matrix.runner }}
     steps:
     - name: Checkout
