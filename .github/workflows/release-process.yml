@@ -87,7 +87,7 @@ jobs:
         git config --global user.name "github-actions[bot]"
         git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-        git tag -asu "$gpg_key_id" -m "$RELEASE_TAG" "$RELEASE_TAG"
+        git tag -asu "$GPG_KEY_ID" -m "$RELEASE_TAG" "$RELEASE_TAG"
 
         git checkout main
         git merge --ff-only "$RELEASE_BRANCH"
