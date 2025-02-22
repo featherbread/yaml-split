@@ -8,6 +8,7 @@ on:
 env:
   CARGO_TERM_COLOR: always
   CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
+  NEXTEST_VERSION: '0.9'
 
 jobs:
   cargo-publish-dry-run:
@@ -76,6 +77,6 @@ jobs:
         rustup default nightly
         rustc --version
     - name: Download Nextest
-      run: curl -LsSf https://get.nexte.st/0.9/linux | tar zxf - -C ${CARGO_HOME:-~/.cargo}/bin
+      run: curl -LsSf "https://get.nexte.st/$NEXTEST_VERSION/linux" | tar zxf - -C ${CARGO_HOME:-~/.cargo}/bin
     - name: Test in Miri
       run: cargo miri nextest run -j num-cpus

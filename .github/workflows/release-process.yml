@@ -3,7 +3,9 @@ name: Release Process
 
 on:
   push:
-    branches: [start-release]
+    branches:
+    - start-release
+    - check-release
 
 env:
   CARGO_TERM_COLOR: always
@@ -64,6 +66,10 @@ jobs:
     runs-on: ubuntu-24.04
     permissions:
       contents: write
+    env:
+      RELEASE_BRANCH: ${{ needs.check-release-branch.outputs.release_branch }}
+      RELEASE_TAG: ${{ needs.check-release-branch.outputs.release_tag }}
+      GPG_KEY_ID: ${{ vars.GPG_KEY_ID }}
     steps:
     - name: Checkout
       uses: actions/checkout@v4
@@ -78,21 +84,31 @@ jobs:
       run: |
         set -x
 
-        release_branch="${{ needs.check-release-branch.outputs.release_branch }}"
-        release_tag="${{ needs.check-release-branch.outputs.release_tag }}"
-        gpg_key_id="${{ vars.GPG_KEY_ID }}"
-
         git config --global user.name "github-actions[bot]"
         git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-        git tag -asu "$gpg_key_id" -m "$release_tag" "$release_tag"
+        git tag -asu "$gpg_key_id" -m "$RELEASE_TAG" "$RELEASE_TAG"
 
         git checkout main
-        git merge --ff-only "$release_branch"
+        git merge --ff-only "$RELEASE_BRANCH"
 
-        git push origin main "$release_tag" :"$release_branch"
+    # So far, none of the intermediate state of the release should be exposed
+    # outside of the GitHub workflow.
+    #
+    # THIS STEP IS THE POINT OF NO RETURN.
+    # IT IS THE ATOMIC MOMENT AT WHICH THE RELEASE OCCURS AND CANNOT BE REVOKED.
+    #
+    # Any failures after this point MUST be possible to recover from manually.
+    # For example, the GitHub release can be cut by hand using archives uploaded
+    # to the workflow run, and the crate can be published from a local checkout
+    # of the tag.
+    - name: Push Release
+      if: ${{ github.ref == 'refs/heads/start-release' }}
+      run: |
+        git push origin main "$RELEASE_TAG" :"$RELEASE_BRANCH"
 
   create-github-release:
+    if: ${{ github.ref == 'refs/heads/start-release' }}
     needs:
     - check-release-branch
     - build-archives
