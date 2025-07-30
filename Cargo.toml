@@ -4,7 +4,7 @@ version = "0.1.21-dev"
 license = "MIT"
 edition = "2021"
 rust-version = "1.70.0"
-repository = "https://github.com/ahamlinman/yaml-split"
+repository = "https://github.com/featherbread/yaml-split"
 
 [dependencies]
 unsafe-libyaml = "0.2.9"
